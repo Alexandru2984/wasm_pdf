@@ -48,6 +48,8 @@ nu prin înlocuirea arbitrară a lui `lopdf`.
   profil, ștergere cont și lifecycle MFA/passkey — backend și UI livrate;
 - verificare email, recuperare parolă, outbox SMTP durabil și teste anti-replay
   end-to-end — livrate;
+- rol PostgreSQL de runtime separat de owner/migrator, retenție în loturi și
+  metrici de mentenanță — livrate;
 - testele complete de autorizare negative și browser E2E WebAuthn.
 
 Înainte de implementare se fixează threat model-ul, schema de tenancy și

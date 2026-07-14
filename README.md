@@ -232,11 +232,14 @@ Prometheus colectează:
 - `pdf_editor_http_requests_total`;
 - `pdf_editor_http_request_duration_seconds`;
 - `pdf_editor_operations_total`;
-- `pdf_editor_operation_duration_seconds`.
+- `pdf_editor_operation_duration_seconds`;
+- `pdf_editor_email_deliveries_total`;
+- `pdf_editor_maintenance_deletions_total` și
+  `pdf_editor_maintenance_runs_total`.
 
 Folderul Grafana `PDF Editor` și dashboard-ul `PDF Editor · Overview` sunt
-provisionate automat cu rate HTTP, succes/erori PDF, percentile de latență și
-loguri corelate.
+provisionate automat cu rate HTTP, succes/erori PDF, percentile de latență,
+rezultatele livrării email, retenția datelor și loguri corelate.
 
 ## CI/CD
 
@@ -252,10 +255,11 @@ ghcr.io/<owner>/<repository>-backend:sha-<commit>
 ghcr.io/<owner>/<repository>-frontend:sha-<commit>
 ```
 
-Tag-ul `latest` este publicat împreună cu SBOM și provenance. Pentru rollout
-automat pe o platformă externă se configurează secretul repository
-`DEPLOY_WEBHOOK_URL`; acesta primește un JSON cu revizia și ambele imagini. Fără
-secret, publicarea imaginilor rămâne rezultatul final al pipeline-ului.
+Tag-ul `latest` este publicat împreună cu SBOM și provenance. Când se
+configurează secretele VPS, workflow-ul copiază un bundle verificat cu SHA-256
+prin SSH cu host key pinning și rulează rollout-ul atomic, backup-ul obligatoriu,
+health-check-ul și rollback-ul automat. Fără credențialele SSH, publicarea
+imaginilor rămâne intenționat rezultatul final al pipeline-ului.
 
 ## Structura proiectului
 
@@ -300,16 +304,17 @@ secret, publicarea imaginilor rămâne rezultatul final al pipeline-ului.
 - PDF-urile criptate trebuie decriptate înainte de procesare.
 - TLS este obligatoriu înainte de expunerea publică; autentificarea prin
   parolă/sesiune/JWT, passkeys, backup codes și rate limiting-ul distribuit sunt
-  livrate în backend. UI-ul de administrare MFA și recuperarea asistată a
-  contului rămân în lucru.
-- Migrarea inițială include schema pentru utilizatori, sesiuni, passkeys, coduri
-  backup și audit.
+  livrate în backend și UI. Verificarea emailului și recuperarea parolei sunt
+  livrate prin SMTP/outbox durabil.
+- Rolul PostgreSQL de runtime este separat de owner/migrator, iar datele de
+  securitate expirate au retenție configurabilă și cleanup în loturi.
 - Axum nativ este ținta server principală. Un deployment Spin/WasmEdge cere
   adaptoare specifice pentru HTTP, stocare, baze de date și SDK-ul S3; binarul
   nativ existent nu trebuie prezentat drept componentă server-WASM.
 
-Vezi [roadmap-ul](docs/roadmap.md) pentru operațiile PDF rămase, identitate,
-storage, webhooks, AI/RAG și criteriile de finalizare.
+Vezi [roadmap-ul](docs/roadmap.md) pentru operațiile PDF rămase, storage,
+webhooks, AI/RAG și criteriile de finalizare. Verdictul și precondițiile de
+go-live sunt în [auditul de securitate](docs/security-audit-2026-07-14.md).
 
 ## Licență
 

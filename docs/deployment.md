@@ -5,6 +5,9 @@ override removes the direct frontend port, binds Grafana only to loopback,
 mounts credentials as Docker secrets, runs database migrations once and places
 Caddy in front of the application for automatic HTTPS.
 
+Treat the [latest security audit](security-audit-2026-07-14.md) and its public
+go-live gate as prerequisites, not as optional post-deployment work.
+
 ## Prerequisites
 
 - a Linux VPS with Docker Engine and Docker Compose 2.24.4 or newer;

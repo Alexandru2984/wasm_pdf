@@ -69,8 +69,9 @@ rotită periodic înainte de expirarea JWT-ului.
 retry exponențial, maximum opt încercări. Stările `sent`, `retry` și `dead` sunt
 expuse ca metrici cu cardinalitate limitată; adresele și linkurile nu apar în
 loguri.
-Tokenurile expirate sunt șterse după șapte zile, iar înregistrările consumate și
-mesajele lor de outbox după 30 de zile.
+Tokenurile expirate sau consumate și mesajele lor de outbox sunt șterse după
+șapte zile. Sesiunile expirate/revocate și evenimentele de audit urmează
+politicile configurabile de 30, respectiv 365 de zile în mod implicit.
 
 Linkurile conțin un UUID aleator și o semnătură HMAC-SHA-256 peste ID,
 utilizator, scop și expirare. Secretul este separat de cheia JWT. Tokenul brut
