@@ -7,6 +7,9 @@ pub struct Config {
     pub host: IpAddr,
     pub port: u16,
     pub log_filter: String,
+    pub database_url: String,
+    pub database_max_connections: u32,
+    pub run_migrations: bool,
 }
 
 impl Config {
@@ -33,11 +36,26 @@ impl Config {
         if log_filter.trim().is_empty() {
             bail!("RUST_LOG must not be empty");
         }
+        let database_url = std::env::var("DATABASE_URL").context("DATABASE_URL must be set")?;
+        if database_url.trim().is_empty() {
+            bail!("DATABASE_URL must not be empty");
+        }
+        let database_max_connections = std::env::var("DATABASE_MAX_CONNECTIONS")
+            .unwrap_or_else(|_| "10".to_owned())
+            .parse::<u32>()
+            .context("DATABASE_MAX_CONNECTIONS must be a positive integer")?;
+        if database_max_connections == 0 || database_max_connections > 100 {
+            bail!("DATABASE_MAX_CONNECTIONS must be between 1 and 100");
+        }
+        let run_migrations = parse_bool("RUN_MIGRATIONS", true)?;
 
         Ok(Self {
             host,
             port,
             log_filter,
+            database_url,
+            database_max_connections,
+            run_migrations,
         })
     }
 
@@ -52,6 +70,19 @@ impl Default for Config {
             host: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
             port: 8080,
             log_filter: "backend=info,tower_http=info".to_owned(),
+            database_url: "postgres://pdf_editor:pdf_editor@localhost/pdf_editor".to_owned(),
+            database_max_connections: 10,
+            run_migrations: true,
         }
+    }
+}
+
+fn parse_bool(name: &str, default: bool) -> anyhow::Result<bool> {
+    match std::env::var(name) {
+        Ok(value) if value.eq_ignore_ascii_case("true") || value == "1" => Ok(true),
+        Ok(value) if value.eq_ignore_ascii_case("false") || value == "0" => Ok(false),
+        Ok(_) => bail!("{name} must be true, false, 1, or 0"),
+        Err(std::env::VarError::NotPresent) => Ok(default),
+        Err(error) => Err(error).with_context(|| format!("could not read {name}")),
     }
 }

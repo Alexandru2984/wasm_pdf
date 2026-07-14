@@ -41,12 +41,24 @@ async fn liveness() -> Json<HealthResponse> {
     })
 }
 
-async fn readiness(State(state): State<AppState>) -> Json<HealthResponse> {
-    Json(HealthResponse {
-        status: "ready",
-        version: env!("CARGO_PKG_VERSION"),
-        uptime_seconds: Some(state.started_at.elapsed().as_secs()),
-    })
+async fn readiness(State(state): State<AppState>) -> impl IntoResponse {
+    let database_ready = match &state.database {
+        Some(database) => database.is_ready().await,
+        None => true,
+    };
+    let status = if database_ready {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
+    (
+        status,
+        Json(HealthResponse {
+            status: if database_ready { "ready" } else { "not_ready" },
+            version: env!("CARGO_PKG_VERSION"),
+            uptime_seconds: Some(state.started_at.elapsed().as_secs()),
+        }),
+    )
 }
 
 async fn metrics(State(state): State<AppState>) -> Response {

@@ -33,7 +33,7 @@ nu prin înlocuirea arbitrară a lui `lopdf`.
 
 ## M2 · Identitate și control acces
 
-- PostgreSQL pentru utilizatori, credențiale și audit;
+- PostgreSQL pentru utilizatori, credențiale și audit — fundație livrată;
 - sesiuni server-side cu cookie `Secure`, `HttpOnly`, `SameSite` și protecție
   CSRF, plus JWT cu durată scurtă numai pentru clienții care îl necesită;
 - WebAuthn/passkeys cu verificarea origin/RP ID și protecție anti-replay;

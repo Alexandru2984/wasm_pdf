@@ -14,8 +14,9 @@ NGINX
 ├── static frontend and WASM artifacts
 └── /api and /metrics proxy
     └── Axum backend (apps/backend)
-        ├── current: health, telemetry and metrics
-        ├── planned: auth, webhook and AI service adapters
+        ├── current: health, telemetry, metrics and PostgreSQL pool
+        ├── current: identity/session schema and embedded migrations
+        ├── planned: auth endpoints, webhook and AI service adapters
         ├── planned: optional R2/S3 persistence adapter
         └── structured logs + OpenMetrics endpoint
 
@@ -42,6 +43,8 @@ Observability
 - Native Axum is the primary deployment target. Server-WASM adapters (Spin or
   WasmEdge) can reuse service modules but require target-specific network,
   database and AWS SDK adapters.
+- Native readiness checks PostgreSQL with a live query. Migration execution can
+  be disabled for deployments that use a separate migration job.
 
 ## Delivery roadmap
 

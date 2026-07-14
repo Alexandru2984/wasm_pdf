@@ -19,6 +19,7 @@ motorul PDF și observabilitate.
 - transfer de `ArrayBuffer` între UI și worker, fără upload de conținut PDF;
 - protocol worker versionat, cu request ID și erori stabile;
 - backend Axum cu health checks, request IDs, loguri JSON și OpenMetrics;
+- PostgreSQL 18 cu pool `sqlx`, migrații embedded și readiness dependent de DB;
 - telemetrie pentru succes, eroare și durata procesării client-side;
 - NGINX, Prometheus, Loki, Promtail și dashboard Grafana preconfigurat;
 - imagini multi-stage, procese non-root și containere read-only unde este
@@ -38,6 +39,7 @@ Yew UI ── transferable buffers ──► Web Worker
     │ operație/status/durată       pdf-engine + lopdf
     ▼                                  │
 NGINX ──► Axum                         └──► Blob URL / download local
+            ├── PostgreSQL
             ├── JSON logs ──► Promtail ──► Loki
             └── /metrics ────────────────► Prometheus
                                                 │
@@ -62,7 +64,8 @@ docker compose ps
 
 Aplicația este disponibilă la <http://localhost:8080>, iar Grafana la
 <http://localhost:3000>. Schimbă `GRAFANA_ADMIN_PASSWORD` în `.env` înaintea
-oricărui deployment accesibil din rețea.
+oricărui deployment accesibil din rețea. Schimbă obligatoriu și
+`POSTGRES_PASSWORD`; valorile implicite sunt destinate exclusiv dezvoltării.
 
 Verificări rapide:
 
@@ -84,8 +87,8 @@ Oprire:
 docker compose down
 ```
 
-Adaugă `--volumes` numai dacă vrei să ștergi și istoricul local Prometheus,
-Loki și Grafana.
+Adaugă `--volumes` numai dacă vrei să ștergi și baza PostgreSQL, plus istoricul
+local Prometheus, Loki și Grafana.
 
 ## Dezvoltare și verificare
 
@@ -200,7 +203,7 @@ secret, publicarea imaginilor rămâne rezultatul final al pipeline-ului.
 ```text
 .
 ├── apps
-│   ├── backend                 # Axum, health, telemetry, metrics, tracing
+│   ├── backend                 # Axum, PostgreSQL, migrations, metrics, tracing
 │   ├── frontend                # Yew CSR și clientul Web Worker
 │   └── pdf-worker              # adaptor wasm-bindgen și protocolul v1
 ├── crates
@@ -235,6 +238,8 @@ secret, publicarea imaginilor rămâne rezultatul final al pipeline-ului.
 - PDF-urile criptate trebuie decriptate înainte de procesare.
 - TLS, autentificarea, autorizarea și rate limiting-ul sunt obligatorii înainte
   de expunerea viitoarelor endpoint-uri cu date de utilizator.
+- Migrarea inițială include schema pentru utilizatori, sesiuni, passkeys, coduri
+  backup și audit; endpoint-urile de autentificare sunt livrate separat.
 - Axum nativ este ținta server principală. Un deployment Spin/WasmEdge cere
   adaptoare specifice pentru HTTP, stocare, baze de date și SDK-ul S3; binarul
   nativ existent nu trebuie prezentat drept componentă server-WASM.
