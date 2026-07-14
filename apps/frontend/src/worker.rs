@@ -17,6 +17,7 @@ pub enum Operation {
     Crop,
     Watermark,
     ExtractText,
+    Flatten,
     Unknown,
 }
 
@@ -30,6 +31,7 @@ impl Operation {
             Self::Crop => "crop",
             Self::Watermark => "watermark",
             Self::ExtractText => "extract_text",
+            Self::Flatten => "flatten",
             Self::Unknown => "unknown",
         }
     }
@@ -96,6 +98,10 @@ pub enum WorkerRequest {
         request_id: String,
         document: Vec<u8>,
         ranges: Vec<PageRange>,
+    },
+    Flatten {
+        request_id: String,
+        document: Vec<u8>,
     },
 }
 
@@ -184,6 +190,10 @@ pub async fn read_request(
             request_id,
             document: documents.into_iter().next().ok_or("Fișierul lipsește.")?,
             ranges: options.ranges,
+        }),
+        Operation::Flatten => Ok(WorkerRequest::Flatten {
+            request_id,
+            document: documents.into_iter().next().ok_or("Fișierul lipsește.")?,
         }),
         Operation::Unknown => Err("Operația nu este suportată.".to_owned()),
     }
@@ -316,6 +326,12 @@ impl WorkerRequest {
             } => {
                 set_document_request(&message, &transfer, &request_id, "extract_text", &document)?;
                 set(&message, "ranges", &ranges_to_js(ranges)?.into())?;
+            }
+            Self::Flatten {
+                request_id,
+                document,
+            } => {
+                set_document_request(&message, &transfer, &request_id, "flatten", &document)?;
             }
         }
 

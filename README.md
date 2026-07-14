@@ -3,8 +3,8 @@
 Editor PDF local-first construit ca workspace Rust. Documentele sunt procesate
 în browser, într-un Web Worker WebAssembly, iar backend-ul primește numai
 telemetrie operațională. Verticalele livrate implementează Merge, Split, Rotate,
-Reorder, Crop, Watermark și Extract Text, de la interfață până la motorul PDF
-și observabilitate.
+Reorder, Crop, Watermark, Extract Text și Flatten, de la interfață până la
+motorul PDF și observabilitate.
 
 > Aceasta este fundația noii arhitecturi, nu încă paritatea funcțională 1:1 cu
 > aplicația originală. Starea exactă și următoarele milestone-uri sunt în
@@ -13,8 +13,8 @@ Reorder, Crop, Watermark și Extract Text, de la interfață până la motorul P
 ## Ce este funcțional
 
 - UI Yew compilat în WASM, cu selectare, validare și descărcare locală;
-- Merge, Split, Rotate, Reorder, Crop, Watermark și Extract Text implementate în
-  Rust cu `lopdf`;
+- Merge, Split, Rotate, Reorder, Crop, Watermark, Extract Text și Flatten
+  implementate în Rust cu `lopdf`;
 - procesare într-un Web Worker dedicat, fără blocarea thread-ului UI;
 - transfer de `ArrayBuffer` între UI și worker, fără upload de conținut PDF;
 - protocol worker versionat, cu request ID și erori stabile;
@@ -140,6 +140,9 @@ opacitate. Implementarea curentă folosește Helvetica/WinAnsi și acceptă text
 ASCII imprimabil; fonturile Unicode embedded rămân necesare pentru paritate.
 Extract Text poate selecta intervale, limitează decompresia la 32 MiB per pagină
 și livrează un fișier UTF-8 `text/plain`; PDF-urile scanate necesită OCR separat.
+Flatten materializează appearance stream-urile câmpurilor `Widget`, elimină
+`AcroForm` și păstrează adnotările non-formular; un widget fără aparență este
+refuzat pentru a evita pierderea vizuală tăcută.
 Operațiile au o limită cumulată de 256 MiB și refuză PDF-urile criptate.
 
 ```javascript

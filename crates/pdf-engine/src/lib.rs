@@ -7,6 +7,7 @@
 mod crop;
 mod error;
 mod extract_text;
+mod flatten;
 mod merge;
 mod page_tree;
 mod reorder;
@@ -17,6 +18,7 @@ mod watermark;
 pub use crop::{PdfRect, crop};
 pub use error::{Error, Result};
 pub use extract_text::extract_text;
+pub use flatten::flatten;
 pub use merge::merge;
 pub use reorder::reorder;
 pub use rotate::rotate;

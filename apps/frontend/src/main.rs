@@ -41,6 +41,7 @@ fn app() -> Html {
                 "crop" => Operation::Crop,
                 "watermark" => Operation::Watermark,
                 "extract_text" => Operation::ExtractText,
+                "flatten" => Operation::Flatten,
                 _ => Operation::Merge,
             };
             operation.set(next);
@@ -251,6 +252,7 @@ fn app() -> Html {
     let is_crop = *operation == Operation::Crop;
     let is_watermark = *operation == Operation::Watermark;
     let is_extract_text = *operation == Operation::ExtractText;
+    let is_flatten = *operation == Operation::Flatten;
     let file_summary = if files.is_empty() {
         "Niciun fișier selectat".to_owned()
     } else {
@@ -285,6 +287,7 @@ fn app() -> Html {
                     <option value="crop" selected={is_crop}>{"Crop — decupează pagini"}</option>
                     <option value="watermark" selected={is_watermark}>{"Watermark — aplică text"}</option>
                     <option value="extract_text" selected={is_extract_text}>{"Extract Text — exportă text"}</option>
+                    <option value="flatten" selected={is_flatten}>{"Flatten — fixează formulare"}</option>
                 </select>
 
                 <div class="upload-zone">
@@ -413,6 +416,12 @@ fn app() -> Html {
                     </div>
                 }
 
+                if is_flatten {
+                    <div class="notice">
+                        {"Câmpurile de formular sunt transformate în conținut permanent. Linkurile și comentariile rămân adnotări."}
+                    </div>
+                }
+
                 <button class="process-button" onclick={on_process} disabled={*busy || files.is_empty()}>
                     if *busy {
                         <span class="spinner" aria-hidden="true"></span>
@@ -429,6 +438,8 @@ fn app() -> Html {
                         {"Aplică watermark"}
                     } else if is_extract_text {
                         {"Extrage textul"}
+                    } else if is_flatten {
+                        {"Fixează formularele"}
                     } else {
                         {"Unește documentele"}
                     }

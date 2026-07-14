@@ -7,8 +7,8 @@ trebuie să aibă teste, observabilitate și modelul de securitate corespunzăto
 ## M0 · Fundație local-first — livrat
 
 - workspace Rust și contracte comune;
-- Merge, Split, Rotate, Reorder, Crop, Watermark și Extract Text în motorul
-  `pdf-engine`;
+- Merge, Split, Rotate, Reorder, Crop, Watermark, Extract Text și Flatten în
+  motorul `pdf-engine`;
 - Web Worker WASM și UI Yew;
 - backend Axum pentru health și telemetrie;
 - Prometheus, Loki, Promtail și Grafana;
@@ -20,7 +20,7 @@ Operațiile vor fi adăugate individual în `pdf-engine`, fără dependențe de 
 
 1. font embedded cu subset Unicode pentru watermark;
 2. OCR pentru documente bazate pe imagini;
-3. flatten;
+3. suport pentru appearance matrices complexe la flatten;
 4. redact cu eliminarea reală a conținutului, nu doar suprapunere vizuală;
 5. semnare criptografică și validarea lanțului de certificate;
 6. conversie PDF/A cu validare de conformitate.

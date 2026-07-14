@@ -42,3 +42,6 @@ the current standard-font implementation accepts printable ASCII.
 Extract Text requests use `operation: "extract_text"`, one `document`, and
 optional `ranges`. The result is `extract-text.txt` with
 `text/plain;charset=utf-8`; extraction is bounded per decompressed page.
+
+Flatten requests use `operation: "flatten"` and one `document`. AcroForm widget
+appearances become page content while non-widget annotations remain intact.

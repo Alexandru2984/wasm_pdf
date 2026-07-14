@@ -50,6 +50,11 @@ pub enum WorkerRequest {
         document: serde_bytes::ByteBuf,
         ranges: Vec<PageRange>,
     },
+    Flatten {
+        protocol_version: u16,
+        request_id: String,
+        document: serde_bytes::ByteBuf,
+    },
 }
 
 impl WorkerRequest {
@@ -75,6 +80,9 @@ impl WorkerRequest {
             }
             | Self::ExtractText {
                 protocol_version, ..
+            }
+            | Self::Flatten {
+                protocol_version, ..
             } => *protocol_version,
         }
     }
@@ -87,7 +95,8 @@ impl WorkerRequest {
             | Self::Reorder { request_id, .. }
             | Self::Crop { request_id, .. }
             | Self::Watermark { request_id, .. }
-            | Self::ExtractText { request_id, .. } => request_id,
+            | Self::ExtractText { request_id, .. }
+            | Self::Flatten { request_id, .. } => request_id,
         }
     }
 
@@ -100,6 +109,7 @@ impl WorkerRequest {
             Self::Crop { .. } => Operation::Crop,
             Self::Watermark { .. } => Operation::Watermark,
             Self::ExtractText { .. } => Operation::ExtractText,
+            Self::Flatten { .. } => Operation::Flatten,
         }
     }
 }
@@ -114,6 +124,7 @@ pub enum Operation {
     Crop,
     Watermark,
     ExtractText,
+    Flatten,
     Unknown,
 }
 

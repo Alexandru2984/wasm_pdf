@@ -46,8 +46,8 @@ Observability
 ## Delivery roadmap
 
 The delivered vertical slices implement merge, split, rotate, reorder, crop and
-standard-font watermarking and bounded text extraction in WASM. The same engine
-boundary is intended for flatten, PDF/A conversion, redact and signing.
+standard-font watermarking, bounded text extraction and AcroForm flattening in
+WASM. The same engine boundary is intended for PDF/A conversion, redact and signing.
 Authentication (JWT/session,
 WebAuthn/passkeys, backup codes), rate limiting, webhooks, AI/RAG and R2/S3 are
 represented as backend module boundaries and are separate production features;

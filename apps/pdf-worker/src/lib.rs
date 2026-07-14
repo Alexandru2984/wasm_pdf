@@ -3,7 +3,7 @@
 mod protocol;
 
 use pdf_engine::{
-    Error as EngineError, crop, extract_text, merge, reorder, rotate, split, watermark,
+    Error as EngineError, crop, extract_text, flatten, merge, reorder, rotate, split, watermark,
 };
 use protocol::{Operation, PROTOCOL_VERSION, WorkerFile, WorkerRequest, WorkerResponse};
 use wasm_bindgen::prelude::*;
@@ -93,6 +93,9 @@ fn process(request: WorkerRequest, started_at: f64) -> WorkerResponse {
         WorkerRequest::ExtractText {
             document, ranges, ..
         } => extract_text(&document, &ranges).map(|text| vec![WorkerFile::extracted_text(text)]),
+        WorkerRequest::Flatten { document, .. } => {
+            flatten(&document).map(|bytes| WorkerFile::pdf_files(operation, vec![bytes]))
+        }
     };
 
     match result {

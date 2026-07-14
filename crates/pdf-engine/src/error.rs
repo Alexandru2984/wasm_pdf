@@ -51,6 +51,9 @@ pub enum Error {
     #[error("text extraction failed: {reason}")]
     TextExtractionFailed { reason: String },
 
+    #[error("form flattening failed: {reason}")]
+    FlattenFailed { reason: String },
+
     #[error("could not write the output PDF: {0}")]
     WriteFailed(String),
 }
@@ -73,6 +76,7 @@ impl Error {
             Self::InvalidRectangle { .. } => "invalid_rectangle",
             Self::InvalidWatermark { .. } => "invalid_watermark",
             Self::TextExtractionFailed { .. } => "text_extraction_failed",
+            Self::FlattenFailed { .. } => "flatten_failed",
             Self::WriteFailed(_) => "write_failed",
         }
     }
