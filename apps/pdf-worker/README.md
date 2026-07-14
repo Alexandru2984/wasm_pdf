@@ -22,3 +22,6 @@ Split requests use `operation: "split"`, one `document` byte array and an array
 of inclusive, one-based `{ start, end }` ranges. Successful responses contain
 transferable `Uint8Array` values under `files[].bytes`.
 
+Rotate requests use `operation: "rotate"`, one `document`, optional inclusive
+`ranges` (empty means all pages), and `angle_degrees` set to `90`, `180`, or
+`270`. The output is one transformed PDF.

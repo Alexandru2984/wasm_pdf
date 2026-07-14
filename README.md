@@ -2,8 +2,8 @@
 
 Editor PDF local-first construit ca workspace Rust. Documentele sunt procesate
 în browser, într-un Web Worker WebAssembly, iar backend-ul primește numai
-telemetrie operațională. Verticala livrată în versiunea `0.1` implementează
-complet Merge și Split, de la interfață până la motorul PDF și observabilitate.
+telemetrie operațională. Verticalele livrate implementează Merge, Split și
+Rotate, de la interfață până la motorul PDF și observabilitate.
 
 > Aceasta este fundația noii arhitecturi, nu încă paritatea funcțională 1:1 cu
 > aplicația originală. Starea exactă și următoarele milestone-uri sunt în
@@ -12,7 +12,7 @@ complet Merge și Split, de la interfață până la motorul PDF și observabili
 ## Ce este funcțional
 
 - UI Yew compilat în WASM, cu selectare, validare și descărcare locală;
-- Merge și Split implementate în Rust cu `lopdf`;
+- Merge, Split și Rotate implementate în Rust cu `lopdf`;
 - procesare într-un Web Worker dedicat, fără blocarea thread-ului UI;
 - transfer de `ArrayBuffer` între UI și worker, fără upload de conținut PDF;
 - protocol worker versionat, cu request ID și erori stabile;
@@ -126,8 +126,10 @@ ore.
 
 ## Contractul Web Worker
 
-Protocolul curent este `1`. Merge primește între 1 și 64 de documente; Split
-primește exact un document și intervale inclusive, numerotate de la 1.
+Protocolul curent este `1`. Merge primește între 1 și 64 de documente; Split și
+Rotate primesc exact un document și intervale inclusive, numerotate de la 1.
+La Rotate, lista goală selectează toate paginile, iar unghiurile acceptate sunt
+90, 180 și 270 de grade în sens orar.
 Operațiile au o limită cumulată de 256 MiB și refuză PDF-urile criptate.
 
 ```javascript
@@ -211,7 +213,7 @@ secret, publicarea imaginilor rămâne rezultatul final al pipeline-ului.
 └── rust-toolchain.toml
 ```
 
-## Limite de producție ale versiunii 0.1
+## Limite de producție ale versiunii curente
 
 - UI-ul raportează telemetrie best-effort; nu raportează nume, bytes sau text
   extras din documente.

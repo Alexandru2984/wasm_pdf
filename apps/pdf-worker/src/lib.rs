@@ -2,7 +2,7 @@
 
 mod protocol;
 
-use pdf_engine::{Error as EngineError, merge, split};
+use pdf_engine::{Error as EngineError, merge, rotate, split};
 use protocol::{Operation, PROTOCOL_VERSION, WorkerRequest, WorkerResponse};
 use wasm_bindgen::prelude::*;
 
@@ -64,6 +64,12 @@ fn process(request: WorkerRequest, started_at: f64) -> WorkerResponse {
         WorkerRequest::Split {
             document, ranges, ..
         } => split(&document, &ranges),
+        WorkerRequest::Rotate {
+            document,
+            ranges,
+            angle_degrees,
+            ..
+        } => rotate(&document, &ranges, angle_degrees).map(|bytes| vec![bytes]),
     };
 
     match result {

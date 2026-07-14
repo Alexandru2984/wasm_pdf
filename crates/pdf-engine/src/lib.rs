@@ -6,10 +6,12 @@
 
 mod error;
 mod merge;
+mod rotate;
 mod split;
 
 pub use error::{Error, Result};
 pub use merge::merge;
+pub use rotate::rotate;
 pub use split::{PageRange, split};
 
 /// Engine version exposed to all execution targets.

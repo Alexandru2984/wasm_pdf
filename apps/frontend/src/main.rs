@@ -18,6 +18,7 @@ fn app() -> Html {
     let operation = use_state(|| Operation::Merge);
     let files = use_state(Vec::new);
     let range_text = use_state(|| "1-1".to_owned());
+    let angle_degrees = use_state(|| 90_i16);
     let busy = use_state(|| false);
     let error = use_state(|| None::<String>);
     let downloads = use_state(Vec::<DownloadFile>::new);
@@ -26,12 +27,19 @@ fn app() -> Html {
         let operation = operation.clone();
         let files = files.clone();
         let downloads = downloads.clone();
+        let range_text = range_text.clone();
         Callback::from(move |event: Event| {
             let input = event.target_unchecked_into::<HtmlSelectElement>();
-            operation.set(if input.value() == "split" {
-                Operation::Split
+            let next = match input.value().as_str() {
+                "split" => Operation::Split,
+                "rotate" => Operation::Rotate,
+                _ => Operation::Merge,
+            };
+            operation.set(next);
+            range_text.set(if next == Operation::Split {
+                "1-1".to_owned()
             } else {
-                Operation::Merge
+                String::new()
             });
             files.set(Vec::new());
             revoke_downloads(&downloads);
@@ -65,10 +73,20 @@ fn app() -> Html {
         })
     };
 
+    let on_angle_change = {
+        let angle_degrees = angle_degrees.clone();
+        Callback::from(move |event: Event| {
+            let input = event.target_unchecked_into::<HtmlSelectElement>();
+            let angle = input.value().parse::<i16>().unwrap_or(90);
+            angle_degrees.set(angle);
+        })
+    };
+
     let on_process = {
         let operation = operation.clone();
         let files = files.clone();
         let range_text = range_text.clone();
+        let angle_degrees = angle_degrees.clone();
         let busy = busy.clone();
         let error = error.clone();
         let downloads = downloads.clone();
@@ -82,11 +100,13 @@ fn app() -> Html {
                 error.set(Some("Selectează cel puțin un fișier PDF.".to_owned()));
                 return;
             }
-            if current_operation == Operation::Split && selected_files.len() != 1 {
-                error.set(Some("Split acceptă exact un fișier PDF.".to_owned()));
+            if current_operation != Operation::Merge && selected_files.len() != 1 {
+                error.set(Some("Operația acceptă exact un fișier PDF.".to_owned()));
                 return;
             }
-            let ranges = if current_operation == Operation::Split {
+            let ranges = if current_operation == Operation::Split
+                || (current_operation == Operation::Rotate && !range_text.trim().is_empty())
+            {
                 match parse_ranges(&range_text) {
                     Ok(ranges) => ranges,
                     Err(message) => {
@@ -97,6 +117,7 @@ fn app() -> Html {
             } else {
                 Vec::new()
             };
+            let current_angle = *angle_degrees;
 
             busy.set(true);
             error.set(None);
@@ -107,15 +128,21 @@ fn app() -> Html {
             let error = error.clone();
             let downloads = downloads.clone();
             spawn_local(async move {
-                let request =
-                    match worker::read_request(current_operation, selected_files, ranges).await {
-                        Ok(request) => request,
-                        Err(message) => {
-                            busy.set(false);
-                            error.set(Some(message));
-                            return;
-                        }
-                    };
+                let request = match worker::read_request(
+                    current_operation,
+                    selected_files,
+                    ranges,
+                    current_angle,
+                )
+                .await
+                {
+                    Ok(request) => request,
+                    Err(message) => {
+                        busy.set(false);
+                        error.set(Some(message));
+                        return;
+                    }
+                };
 
                 let callback_busy = busy.clone();
                 let callback_error = error.clone();
@@ -163,6 +190,7 @@ fn app() -> Html {
     };
 
     let is_split = *operation == Operation::Split;
+    let is_rotate = *operation == Operation::Rotate;
     let file_summary = if files.is_empty() {
         "Niciun fișier selectat".to_owned()
     } else {
@@ -190,14 +218,15 @@ fn app() -> Html {
 
                 <label class="field-label" for="operation">{"Operație"}</label>
                 <select id="operation" onchange={on_operation_change} disabled={*busy}>
-                    <option value="merge" selected={!is_split}>{"Merge — combină PDF-uri"}</option>
+                    <option value="merge" selected={*operation == Operation::Merge}>{"Merge — combină PDF-uri"}</option>
                     <option value="split" selected={is_split}>{"Split — extrage intervale"}</option>
+                    <option value="rotate" selected={is_rotate}>{"Rotate — rotește pagini"}</option>
                 </select>
 
                 <div class="upload-zone">
                     <label for="pdf-files" class="upload-label">
                         <span class="upload-icon" aria-hidden="true">{"↗"}</span>
-                        <strong>{if is_split { "Alege un PDF" } else { "Alege PDF-urile" }}</strong>
+                        <strong>{if *operation == Operation::Merge { "Alege PDF-urile" } else { "Alege un PDF" }}</strong>
                         <span>{"Click pentru selectare · max. 256 MiB per operație"}</span>
                     </label>
                     <input
@@ -205,25 +234,40 @@ fn app() -> Html {
                         class="file-input"
                         type="file"
                         accept="application/pdf,.pdf"
-                        multiple={!is_split}
+                        multiple={*operation == Operation::Merge}
                         onchange={on_files_change}
                         disabled={*busy}
                     />
                     <p class="file-summary">{file_summary}</p>
                 </div>
 
-                if is_split {
+                if is_split || is_rotate {
                     <div class="range-field">
-                        <label class="field-label" for="ranges">{"Intervale de pagini"}</label>
+                        <label class="field-label" for="ranges">
+                            {if is_rotate { "Pagini de rotit" } else { "Intervale de pagini" }}
+                        </label>
                         <input
                             id="ranges"
                             type="text"
                             value={(*range_text).clone()}
                             oninput={on_range_change}
-                            placeholder="1-3, 5, 8-10"
+                            placeholder={if is_rotate { "Gol = toate paginile; ex. 1-3, 5" } else { "1-3, 5, 8-10" }}
                             disabled={*busy}
                         />
-                        <small>{"Intervalele sunt inclusive și numerotate de la 1."}</small>
+                        <small>
+                            {if is_rotate { "Lasă gol pentru toate paginile. Intervalele sunt inclusive." } else { "Intervalele sunt inclusive și numerotate de la 1." }}
+                        </small>
+                    </div>
+                }
+
+                if is_rotate {
+                    <div class="range-field">
+                        <label class="field-label" for="angle">{"Rotație în sens orar"}</label>
+                        <select id="angle" onchange={on_angle_change} disabled={*busy}>
+                            <option value="90" selected={*angle_degrees == 90}>{"90°"}</option>
+                            <option value="180" selected={*angle_degrees == 180}>{"180°"}</option>
+                            <option value="270" selected={*angle_degrees == 270}>{"270°"}</option>
+                        </select>
                     </div>
                 }
 
@@ -233,6 +277,8 @@ fn app() -> Html {
                         {"Procesez în worker…"}
                     } else if is_split {
                         {"Separă documentul"}
+                    } else if is_rotate {
+                        {"Rotește paginile"}
                     } else {
                         {"Unește documentele"}
                     }

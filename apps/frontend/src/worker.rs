@@ -12,6 +12,7 @@ const PROTOCOL_VERSION: u16 = 1;
 pub enum Operation {
     Merge,
     Split,
+    Rotate,
     Unknown,
 }
 
@@ -20,6 +21,7 @@ impl Operation {
         match self {
             Self::Merge => "merge",
             Self::Split => "split",
+            Self::Rotate => "rotate",
             Self::Unknown => "unknown",
         }
     }
@@ -40,6 +42,12 @@ pub enum WorkerRequest {
         request_id: String,
         document: Vec<u8>,
         ranges: Vec<PageRange>,
+    },
+    Rotate {
+        request_id: String,
+        document: Vec<u8>,
+        ranges: Vec<PageRange>,
+        angle_degrees: i16,
     },
 }
 
@@ -69,6 +77,7 @@ pub async fn read_request(
     operation: Operation,
     files: Vec<File>,
     ranges: Vec<PageRange>,
+    angle_degrees: i16,
 ) -> Result<WorkerRequest, String> {
     let mut documents = Vec::with_capacity(files.len());
     for file in files {
@@ -87,6 +96,12 @@ pub async fn read_request(
             request_id,
             document: documents.into_iter().next().ok_or("Fișierul lipsește.")?,
             ranges,
+        }),
+        Operation::Rotate => Ok(WorkerRequest::Rotate {
+            request_id,
+            document: documents.into_iter().next().ok_or("Fișierul lipsește.")?,
+            ranges,
+            angle_degrees,
         }),
         Operation::Unknown => Err("Operația nu este suportată.".to_owned()),
     }
@@ -171,6 +186,27 @@ impl WorkerRequest {
                     values.push(&value);
                 }
                 set(&message, "ranges", &values.into())?;
+            }
+            Self::Rotate {
+                request_id,
+                document,
+                ranges,
+                angle_degrees,
+            } => {
+                set(&message, "request_id", &JsValue::from_str(&request_id))?;
+                set(&message, "operation", &JsValue::from_str("rotate"))?;
+                let bytes = Uint8Array::from(document.as_slice());
+                transfer.push(&bytes.buffer());
+                set(&message, "document", &bytes.into())?;
+                let values = Array::new();
+                for range in ranges {
+                    let value = Object::new();
+                    set(&value, "start", &range.start.into())?;
+                    set(&value, "end", &range.end.into())?;
+                    values.push(&value);
+                }
+                set(&message, "ranges", &values.into())?;
+                set(&message, "angle_degrees", &angle_degrees.into())?;
             }
         }
 

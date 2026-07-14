@@ -33,6 +33,12 @@ pub enum Error {
         page_count: u32,
     },
 
+    #[error("rotation angle {angle_degrees} is invalid; use 90, 180, or 270 degrees")]
+    InvalidRotation { angle_degrees: i16 },
+
+    #[error("input PDF has an invalid page at number {page_number}: {reason}")]
+    InvalidPage { page_number: u32, reason: String },
+
     #[error("could not write the output PDF: {0}")]
     WriteFailed(String),
 }
@@ -49,6 +55,8 @@ impl Error {
             Self::EmptyPdf { .. } => "empty_pdf",
             Self::NoPageRanges => "no_page_ranges",
             Self::InvalidPageRange { .. } => "invalid_page_range",
+            Self::InvalidRotation { .. } => "invalid_rotation",
+            Self::InvalidPage { .. } => "invalid_page",
             Self::WriteFailed(_) => "write_failed",
         }
     }
