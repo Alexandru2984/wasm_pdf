@@ -35,12 +35,13 @@ nu prin înlocuirea arbitrară a lui `lopdf`.
 
 - PostgreSQL pentru utilizatori, credențiale și audit — fundație livrată;
 - sesiuni server-side cu cookie `Secure`, `HttpOnly`, `SameSite` și protecție
-  CSRF, plus JWT cu durată scurtă numai pentru clienții care îl necesită;
+  CSRF, plus JWT cu durată scurtă — livrat;
 - WebAuthn/passkeys cu verificarea origin/RP ID și protecție anti-replay;
 - coduri de backup generate criptografic, afișate o singură dată și stocate
   numai sub formă de hash;
 - rate limiting distribuit pe identitate, IP și categorie de endpoint;
-- rotație/revocare, recuperare cont, audit și teste de autorizare negative.
+- rotație/revocare și audit pentru register/login/refresh/logout — livrate;
+- recuperare cont și testele complete de autorizare negative.
 
 Înainte de implementare se fixează threat model-ul, schema de tenancy și
 politicile de retenție. Endpoint-urile de identitate nu vor fi amestecate cu

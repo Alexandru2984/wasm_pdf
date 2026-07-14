@@ -10,6 +10,17 @@ pub struct Config {
     pub database_url: String,
     pub database_max_connections: u32,
     pub run_migrations: bool,
+    pub auth: AuthConfig,
+}
+
+#[derive(Clone, Debug)]
+pub struct AuthConfig {
+    pub jwt_secret: String,
+    pub jwt_issuer: String,
+    pub jwt_audience: String,
+    pub access_token_seconds: i64,
+    pub session_days: i64,
+    pub cookie_secure: bool,
 }
 
 impl Config {
@@ -48,6 +59,15 @@ impl Config {
             bail!("DATABASE_MAX_CONNECTIONS must be between 1 and 100");
         }
         let run_migrations = parse_bool("RUN_MIGRATIONS", true)?;
+        let jwt_secret = std::env::var("JWT_SECRET").context("JWT_SECRET must be set")?;
+        if jwt_secret.len() < 32 {
+            bail!("JWT_SECRET must contain at least 32 bytes");
+        }
+        let jwt_issuer = nonempty_env("JWT_ISSUER", "wasm-pdf-editor")?;
+        let jwt_audience = nonempty_env("JWT_AUDIENCE", "wasm-pdf-editor-web")?;
+        let access_token_seconds = parse_i64_range("ACCESS_TOKEN_SECONDS", 900, 60, 3_600)?;
+        let session_days = parse_i64_range("SESSION_DAYS", 30, 1, 90)?;
+        let cookie_secure = parse_bool("COOKIE_SECURE", true)?;
 
         Ok(Self {
             host,
@@ -56,6 +76,14 @@ impl Config {
             database_url,
             database_max_connections,
             run_migrations,
+            auth: AuthConfig {
+                jwt_secret,
+                jwt_issuer,
+                jwt_audience,
+                access_token_seconds,
+                session_days,
+                cookie_secure,
+            },
         })
     }
 
@@ -73,8 +101,35 @@ impl Default for Config {
             database_url: "postgres://pdf_editor:pdf_editor@localhost/pdf_editor".to_owned(),
             database_max_connections: 10,
             run_migrations: true,
+            auth: AuthConfig {
+                jwt_secret: "development-only-secret-at-least-32-bytes".to_owned(),
+                jwt_issuer: "wasm-pdf-editor".to_owned(),
+                jwt_audience: "wasm-pdf-editor-web".to_owned(),
+                access_token_seconds: 900,
+                session_days: 30,
+                cookie_secure: false,
+            },
         }
     }
+}
+
+fn nonempty_env(name: &str, default: &str) -> anyhow::Result<String> {
+    let value = std::env::var(name).unwrap_or_else(|_| default.to_owned());
+    if value.trim().is_empty() {
+        bail!("{name} must not be empty");
+    }
+    Ok(value)
+}
+
+fn parse_i64_range(name: &str, default: i64, minimum: i64, maximum: i64) -> anyhow::Result<i64> {
+    let value = std::env::var(name)
+        .unwrap_or_else(|_| default.to_string())
+        .parse::<i64>()
+        .with_context(|| format!("{name} must be an integer"))?;
+    if !(minimum..=maximum).contains(&value) {
+        bail!("{name} must be between {minimum} and {maximum}");
+    }
+    Ok(value)
 }
 
 fn parse_bool(name: &str, default: bool) -> anyhow::Result<bool> {

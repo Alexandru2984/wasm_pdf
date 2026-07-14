@@ -20,6 +20,8 @@ motorul PDF și observabilitate.
 - protocol worker versionat, cu request ID și erori stabile;
 - backend Axum cu health checks, request IDs, loguri JSON și OpenMetrics;
 - PostgreSQL 18 cu pool `sqlx`, migrații embedded și readiness dependent de DB;
+- conturi cu parole Argon2id, sesiuni server-side rotative, JWT-uri scurte și
+  protecție CSRF pentru operațiile bazate pe cookie;
 - telemetrie pentru succes, eroare și durata procesării client-side;
 - NGINX, Prometheus, Loki, Promtail și dashboard Grafana preconfigurat;
 - imagini multi-stage, procese non-root și containere read-only unde este
@@ -114,6 +116,11 @@ Build-ul de producție al frontend-ului instalează versiunile fixate de
 | `GET` | `/health/live` | liveness fără dependențe externe |
 | `GET` | `/health/ready` | readiness și uptime |
 | `GET` | `/metrics` | OpenMetrics, accesibil intern Prometheus |
+| `POST` | `/api/v1/auth/register` | creare cont și sesiune inițială |
+| `POST` | `/api/v1/auth/login` | autentificare și sesiune nouă |
+| `POST` | `/api/v1/auth/refresh` | rotație sesiune; necesită cookie și `X-CSRF-Token` |
+| `POST` | `/api/v1/auth/logout` | revocare sesiune; necesită cookie și `X-CSRF-Token` |
+| `GET` | `/api/v1/auth/me` | identitatea asociată unui JWT Bearer activ |
 | `POST` | `/api/v1/telemetry/pdf-operations` | rezultat și durată, fără bytes PDF |
 
 Exemplu de telemetrie acceptată:
@@ -128,6 +135,14 @@ curl --fail-with-body \
 Operația și statusul sunt enum-uri închise pentru a preveni cardinalitatea
 necontrolată în Prometheus. Durata acceptată este finită și limitată la 24 de
 ore.
+
+Parolele au între 12 și 128 de caractere și sunt stocate exclusiv ca hash
+Argon2id cu salt aleator. Cookie-ul de sesiune este `HttpOnly`, `SameSite=Strict`
+și `Secure` implicit în afara configurației locale. Backend-ul păstrează numai
+hash-urile tokenurilor de sesiune și CSRF, rotește sesiunea la refresh și
+invalidează imediat JWT-ul asociat sesiunii vechi. JWT-urile expiră implicit în
+15 minute și sunt reverificate față de sesiunea activă din PostgreSQL. Contractul
+și modelul de amenințări sunt descrise în [documentația de autentificare](docs/authentication.md).
 
 ## Contractul Web Worker
 
@@ -236,10 +251,11 @@ secret, publicarea imaginilor rămâne rezultatul final al pipeline-ului.
 - Limita de 256 MiB reduce abuzul, dar memoria efectivă necesară poate depăși
   dimensiunea fișierului în timpul parsării. Limitele browserului rămân valabile.
 - PDF-urile criptate trebuie decriptate înainte de procesare.
-- TLS, autentificarea, autorizarea și rate limiting-ul sunt obligatorii înainte
-  de expunerea viitoarelor endpoint-uri cu date de utilizator.
+- TLS și rate limiting-ul distribuit sunt obligatorii înainte de expunerea
+  publică; autentificarea prin parolă/sesiune/JWT este livrată, însă passkeys,
+  backup codes și recuperarea contului rămân în lucru.
 - Migrarea inițială include schema pentru utilizatori, sesiuni, passkeys, coduri
-  backup și audit; endpoint-urile de autentificare sunt livrate separat.
+  backup și audit.
 - Axum nativ este ținta server principală. Un deployment Spin/WasmEdge cere
   adaptoare specifice pentru HTTP, stocare, baze de date și SDK-ul S3; binarul
   nativ existent nu trebuie prezentat drept componentă server-WASM.

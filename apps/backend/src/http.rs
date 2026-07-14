@@ -17,6 +17,7 @@ const REQUEST_ID_HEADER: HeaderName = HeaderName::from_static("x-request-id");
 
 pub fn router(state: AppState) -> Router {
     Router::new()
+        .merge(crate::auth::router())
         .route("/health/live", get(liveness))
         .route("/health/ready", get(readiness))
         .route("/metrics", get(metrics))

@@ -1,5 +1,6 @@
 //! Native Axum API and platform-neutral service boundaries.
 
+mod auth;
 mod config;
 mod database;
 mod http;
@@ -8,7 +9,8 @@ mod observability;
 
 use std::time::Instant;
 
-pub use config::Config;
+pub use auth::AuthService;
+pub use config::{AuthConfig, Config};
 pub use database::Database;
 pub use metrics::Metrics;
 pub use observability::init_tracing;
@@ -19,6 +21,7 @@ pub struct AppState {
     pub metrics: Metrics,
     pub started_at: Instant,
     pub database: Option<Database>,
+    pub auth: Option<AuthService>,
 }
 
 impl AppState {
@@ -27,12 +30,21 @@ impl AppState {
             metrics: Metrics::new(),
             started_at: Instant::now(),
             database: None,
+            auth: None,
         }
     }
 
     pub fn with_database(database: Database) -> Self {
         Self {
             database: Some(database),
+            ..Self::new()
+        }
+    }
+
+    pub fn with_services(database: Database, auth: AuthService) -> Self {
+        Self {
+            database: Some(database),
+            auth: Some(auth),
             ..Self::new()
         }
     }
