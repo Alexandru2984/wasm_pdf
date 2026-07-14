@@ -10,9 +10,78 @@
     <meta name="theme-color" content="#10130f" />
     <title>PDF Editor · Rust/WASM</title>
     <link data-trunk rel="css" href="styles.css" />
+    <script>
+      window.pdfEditorWebAuthn = (() => {
+        const decode = (value) => {
+          const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+          const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+          const binary = atob(padded);
+          return Uint8Array.from(binary, character => character.charCodeAt(0));
+        };
+        const encode = (value) => {
+          const bytes = new Uint8Array(value);
+          let binary = "";
+          bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+          return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+        };
+        const creationOptions = (source) => {
+          const options = structuredClone(source);
+          options.challenge = decode(options.challenge);
+          options.user.id = decode(options.user.id);
+          for (const credential of options.excludeCredentials || []) credential.id = decode(credential.id);
+          return options;
+        };
+        const requestOptions = (source) => {
+          const options = structuredClone(source);
+          options.challenge = decode(options.challenge);
+          for (const credential of options.allowCredentials || []) credential.id = decode(credential.id);
+          return options;
+        };
+        const registrationJson = (credential) => ({
+          id: credential.id,
+          rawId: encode(credential.rawId),
+          type: credential.type,
+          response: {
+            attestationObject: encode(credential.response.attestationObject),
+            clientDataJSON: encode(credential.response.clientDataJSON),
+            transports: typeof credential.response.getTransports === "function"
+              ? credential.response.getTransports()
+              : [],
+          },
+          extensions: credential.getClientExtensionResults(),
+        });
+        const authenticationJson = (credential) => ({
+          id: credential.id,
+          rawId: encode(credential.rawId),
+          type: credential.type,
+          response: {
+            authenticatorData: encode(credential.response.authenticatorData),
+            clientDataJSON: encode(credential.response.clientDataJSON),
+            signature: encode(credential.response.signature),
+            userHandle: credential.response.userHandle ? encode(credential.response.userHandle) : null,
+          },
+          extensions: credential.getClientExtensionResults(),
+        });
+        return {
+          createCredential: async (options) => {
+            const source = options.publicKey || options;
+            const credential = await navigator.credentials.create({ publicKey: creationOptions(source) });
+            if (!credential) throw new Error("Nu a fost creat niciun credential.");
+            return registrationJson(credential);
+          },
+          getCredential: async (options) => {
+            const source = options.publicKey || options;
+            const request = { publicKey: requestOptions(source) };
+            if (options.mediation) request.mediation = options.mediation.toLowerCase();
+            const credential = await navigator.credentials.get(request);
+            if (!credential) throw new Error("Nu a fost selectat niciun credential.");
+            return authenticationJson(credential);
+          },
+        };
+      })();
+    </script>
   </head>
   <body>
     <noscript>Aplicația necesită JavaScript pentru a încărca modulul WebAssembly.</noscript>
   </body>
 </html>
-

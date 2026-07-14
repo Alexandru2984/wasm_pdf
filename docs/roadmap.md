@@ -37,14 +37,15 @@ nu prin înlocuirea arbitrară a lui `lopdf`.
 - sesiuni server-side cu cookie `Secure`, `HttpOnly`, `SameSite` și protecție
   CSRF, plus JWT cu durată scurtă — livrat;
 - WebAuthn/passkeys cu verificarea origin/RP ID, challenge server-side și
-  protecție anti-replay — backend livrat; UI și browser E2E rămân;
+  protecție anti-replay — backend și UI livrate; browser E2E cu authenticator
+  virtual rămâne;
 - coduri de backup generate criptografic, afișate o singură dată, stocate numai
   sub formă de hash și consumate tranzacțional — backend livrat;
 - rate limiting distribuit pe identitate, IP/sesiune și categorie de endpoint
   pentru fluxurile de autentificare — livrat;
 - rotație/revocare și audit pentru register/login/refresh/logout — livrate;
 - inventar și revocare dispozitive, schimbare parolă cu revocare globală,
-  profil, ștergere cont și lifecycle MFA/passkey — backend livrat;
+  profil, ștergere cont și lifecycle MFA/passkey — backend și UI livrate;
 - recuperare cont și testele complete de autorizare negative.
 
 Înainte de implementare se fixează threat model-ul, schema de tenancy și

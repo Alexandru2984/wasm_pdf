@@ -92,7 +92,8 @@ prin HTTPS. Valorile din Compose sunt numai pentru dezvoltare.
 
 ## Funcționalități rămase
 
-UI-ul browser pentru autentificare și înrolare/administrare, verificarea emailului
-și recuperarea asistată a contului rămân verticale separate. Testele browser vor
-folosi un authenticator virtual; testele API verifică între timp origin/RP,
-persistența server-side și expirarea challenge-ului.
+UI-ul browser pentru autentificare, sesiuni, profil și ciclul complet
+passkey/MFA este livrat. Verificarea emailului și recuperarea asistată a contului
+rămân verticale separate. Testele browser pentru ceremonia WebAuthn vor folosi un
+authenticator virtual; testele API verifică între timp origin/RP, persistența
+server-side și expirarea challenge-ului.

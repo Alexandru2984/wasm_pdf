@@ -1,5 +1,7 @@
+mod auth;
 mod worker;
 
+use auth::{AuthPanel, AuthSession};
 use gloo::net::http::Request;
 use serde::Serialize;
 use wasm_bindgen_futures::spawn_local;
@@ -26,6 +28,7 @@ fn app() -> Html {
     let busy = use_state(|| false);
     let error = use_state(|| None::<String>);
     let downloads = use_state(Vec::<DownloadFile>::new);
+    let auth_session = use_state(|| None::<AuthSession>);
 
     let on_operation_change = {
         let operation = operation.clone();
@@ -268,6 +271,14 @@ fn app() -> Html {
                     {"Transformă documente fără upload. Bytes rămân în browser, iar procesarea rulează într-un Web Worker dedicat."}
                 </p>
             </header>
+
+            <AuthPanel
+                session={(*auth_session).clone()}
+                on_session={{
+                    let auth_session = auth_session.clone();
+                    Callback::from(move |session| auth_session.set(session))
+                }}
+            />
 
             <section class="workspace" aria-labelledby="tool-title">
                 <div class="section-heading">
