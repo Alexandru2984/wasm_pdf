@@ -1,12 +1,41 @@
+# Rust build and coverage artifacts
 /target/
+**/*.rs.bk
+*.profraw
+lcov.info
+coverage/
+
+# Generated frontend and WebAssembly output
 /dist/
 **/dist/
 **/pkg/
+node_modules/
+**/node_modules/
+.trunk/
+**/.trunk/
+
+# Local configuration and secrets
 .env
 .env.*
 !.env.example
-.DS_Store
+secrets/
+*.dump
+*.dump.age
+
+# Logs and temporary files
 *.log
+*.tmp
+*.swp
+*~
+
+# Editor and operating-system metadata
 .idea/
 .vscode/
+.fleet/
+.zed/
+.DS_Store
+Thumbs.db
 
+# Browser test output
+playwright-report/
+test-results/
