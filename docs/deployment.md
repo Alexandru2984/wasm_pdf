@@ -13,6 +13,8 @@ Caddy in front of the application for automatic HTTPS.
 - inbound TCP 80/443 and UDP 443; Grafana and PostgreSQL stay non-public;
 - immutable backend and frontend image references, preferably `sha-*` tags or
   image digests published by the deployment workflow.
+- `age`, AWS CLI v2 and the encrypted off-site backup policy described in the
+  [disaster recovery runbook](disaster-recovery.md).
 
 ## Create host secrets
 
@@ -91,4 +93,7 @@ same `up -d` command. A migration that is not backward compatible requires a
 documented database restore or forward-fix plan before it can be deployed.
 
 Database backup, point-in-time recovery and restore verification are separate
-mandatory gates before the first public rollout.
+mandatory gates before the first public rollout. The repository now includes a
+daily systemd timer, streamed `age` encryption, optional R2/S3 upload and a full
+disposable restore verifier. Complete and record one successful restore drill
+before exposing the service publicly.

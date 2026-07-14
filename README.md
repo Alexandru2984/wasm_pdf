@@ -30,6 +30,8 @@ motorul PDF și observabilitate.
   posibil;
 - CI pentru format, Clippy, teste native, ținte WASM, configurații și imagini;
 - CD către GitHub Container Registry, urmat opțional de un webhook de rollout.
+- backup-uri PostgreSQL criptate în flux cu `age`, upload R2/S3 și verificare
+  prin restaurare completă într-o bază temporară.
 
 ## Arhitectură
 
@@ -95,6 +97,8 @@ Deployment-ul public nu trebuie pornit numai din configurația locală de mai
 sus. Override-ul de producție adaugă TLS automat, secrets montate din fișiere,
 migrare one-shot și elimină expunerea directă a frontend-ului/Grafana. Pașii
 compleți sunt în [ghidul de deployment VPS](docs/deployment.md).
+Procedura de backup, testul de restaurare și pașii de disaster recovery sunt în
+[runbook-ul dedicat](docs/disaster-recovery.md).
 
 Adaugă `--volumes` numai dacă vrei să ștergi și baza PostgreSQL, plus istoricul
 local Prometheus, Loki și Grafana.
