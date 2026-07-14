@@ -11,7 +11,9 @@ mod observability;
 use std::time::Instant;
 
 pub use auth::AuthService;
-pub use config::{AuthConfig, Config, EmailConfig, Environment, SmtpTls};
+pub use config::{
+    AuthConfig, Config, DatabaseConfig, EmailConfig, Environment, RuntimeDatabaseRole, SmtpTls,
+};
 pub use database::Database;
 pub use email::EmailService;
 pub use metrics::Metrics;

@@ -17,10 +17,8 @@ services:
   migrate:
     image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE to an immutable sha tag or digest}
     command: ["migrate"]
-    environment: &backend-production-environment
+    environment: &database-owner-environment
       APP_ENV: production
-      APP_HOST: 0.0.0.0
-      APP_PORT: 8080
       RUST_LOG: ${RUST_LOG:-backend=info}
       DATABASE_HOST: postgres
       DATABASE_PORT: 5432
@@ -29,33 +27,11 @@ services:
       DATABASE_PASSWORD_FILE: /run/secrets/postgres_password
       DATABASE_MAX_CONNECTIONS: 2
       RUN_MIGRATIONS: "true"
-      JWT_SECRET_FILE: /run/secrets/jwt_secret
-      JWT_ISSUER: ${JWT_ISSUER:-wasm-pdf-editor}
-      JWT_AUDIENCE: ${JWT_AUDIENCE:-wasm-pdf-editor-web}
-      ACCESS_TOKEN_SECONDS: ${ACCESS_TOKEN_SECONDS:-900}
-      SESSION_DAYS: ${SESSION_DAYS:-30}
-      COOKIE_SECURE: "true"
-      WEBAUTHN_RP_ID: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the application DNS name}
-      WEBAUTHN_RP_ORIGIN: https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the application DNS name}
-      WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-PDF Editor}
-      EMAIL_DELIVERY_ENABLED: "true"
-      PUBLIC_BASE_URL: https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the application DNS name}
-      EMAIL_TOKEN_SECRET_FILE: /run/secrets/email_token_secret
-      SMTP_HOST: ${SMTP_HOST:?Set the production SMTP relay host}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USERNAME: ${SMTP_USERNAME:?Set the production SMTP username}
-      SMTP_PASSWORD_FILE: /run/secrets/smtp_password
-      SMTP_TLS: starttls
-      SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:?Set the verified sender address}
-      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-PDF Editor}
     depends_on: !override
       postgres:
         condition: service_healthy
     secrets:
       - postgres_password
-      - jwt_secret
-      - email_token_secret
-      - smtp_password
     networks:
       - app
     read_only: true
@@ -70,25 +46,77 @@ services:
   backend:
     image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE to an immutable sha tag or digest}
     build: !reset null
-    environment:
-      <<: *backend-production-environment
+    environment: &backend-production-environment
+      APP_ENV: production
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8080
+      RUST_LOG: ${RUST_LOG:-backend=info}
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: ${POSTGRES_DB:-pdf_editor}
+      DATABASE_USER: ${DATABASE_RUNTIME_USER:-pdf_editor_runtime}
       DATABASE_PASSWORD: !reset null
+      DATABASE_PASSWORD_FILE: /run/secrets/database_runtime_password
       DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-10}
-      JWT_SECRET: !reset null
-      EMAIL_TOKEN_SECRET: !reset null
       RUN_MIGRATIONS: "false"
+      JWT_SECRET: !reset null
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      JWT_ISSUER: ${JWT_ISSUER:-wasm-pdf-editor}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-wasm-pdf-editor-web}
+      ACCESS_TOKEN_SECONDS: ${ACCESS_TOKEN_SECONDS:-900}
+      SESSION_DAYS: ${SESSION_DAYS:-30}
+      COOKIE_SECURE: "true"
+      WEBAUTHN_RP_ID: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the application DNS name}
+      WEBAUTHN_RP_ORIGIN: https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the application DNS name}
+      WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-PDF Editor}
+      EMAIL_DELIVERY_ENABLED: "true"
+      PUBLIC_BASE_URL: https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the application DNS name}
+      EMAIL_TOKEN_SECRET: !reset null
+      EMAIL_TOKEN_SECRET_FILE: /run/secrets/email_token_secret
+      SMTP_HOST: ${SMTP_HOST:?Set the production SMTP relay host}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:?Set the production SMTP username}
+      SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+      SMTP_TLS: starttls
+      SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:?Set the verified sender address}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-PDF Editor}
     depends_on:
       postgres:
         condition: service_healthy
-      migrate:
+      database-role:
         condition: service_completed_successfully
     secrets:
-      - postgres_password
+      - database_runtime_password
       - jwt_secret
       - email_token_secret
       - smtp_password
     cap_drop:
       - ALL
+
+  database-role:
+    image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE to an immutable sha tag or digest}
+    command: ["provision-database-role"]
+    environment:
+      <<: *database-owner-environment
+      RUN_MIGRATIONS: "false"
+      DATABASE_RUNTIME_USER: ${DATABASE_RUNTIME_USER:-pdf_editor_runtime}
+      DATABASE_RUNTIME_PASSWORD_FILE: /run/secrets/database_runtime_password
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    secrets:
+      - postgres_password
+      - database_runtime_password
+    networks:
+      - app
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: "no"
 
   mailpit: !reset null
 
@@ -142,6 +170,8 @@ services:
 secrets:
   postgres_password:
     file: ${SECRETS_DIR:-/etc/wasm-pdf-editor/secrets}/postgres_password
+  database_runtime_password:
+    file: ${SECRETS_DIR:-/etc/wasm-pdf-editor/secrets}/database_runtime_password
   jwt_secret:
     file: ${SECRETS_DIR:-/etc/wasm-pdf-editor/secrets}/jwt_secret
   email_token_secret:

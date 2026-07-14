@@ -25,6 +25,7 @@ Write the SMTP credential supplied by the provider separately:
 ```bash
 sudo install -d -m 0700 /etc/wasm-pdf-editor/secrets
 openssl rand -base64 48 | sudo tee /etc/wasm-pdf-editor/secrets/postgres_password >/dev/null
+openssl rand -base64 48 | sudo tee /etc/wasm-pdf-editor/secrets/database_runtime_password >/dev/null
 openssl rand -base64 48 | sudo tee /etc/wasm-pdf-editor/secrets/jwt_secret >/dev/null
 openssl rand -base64 48 | sudo tee /etc/wasm-pdf-editor/secrets/email_token_secret >/dev/null
 openssl rand -base64 48 | sudo tee /etc/wasm-pdf-editor/secrets/grafana_admin_password >/dev/null
@@ -36,6 +37,12 @@ The backend accepts `DATABASE_PASSWORD_FILE`, `JWT_SECRET_FILE`,
 `EMAIL_TOKEN_SECRET_FILE`, `SMTP_PASSWORD_FILE` and, when a complete external
 connection string is needed, `DATABASE_URL_FILE`. Setting a value and its
 `_FILE` variant simultaneously is rejected.
+
+`postgres_password` belongs only to the database owner and one-shot migration,
+role-provisioning and recovery jobs. The long-running backend connects as
+`pdf_editor_runtime` using `database_runtime_password`. The provisioning job
+removes superuser, database/role creation, replication and row-security bypass
+privileges, revokes public schema creation and grants only application DML.
 
 ## Prepare the release account
 

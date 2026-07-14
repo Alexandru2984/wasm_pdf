@@ -1,5 +1,8 @@
 use anyhow::Context;
-use backend::{AppState, AuthService, Config, Database, EmailService, build_router, init_tracing};
+use backend::{
+    AppState, AuthService, Config, Database, DatabaseConfig, EmailService, RuntimeDatabaseRole,
+    build_router, init_tracing,
+};
 use std::{
     io::{Read, Write},
     net::{Ipv4Addr, SocketAddrV4, TcpStream},
@@ -14,20 +17,43 @@ async fn main() -> anyhow::Result<()> {
     }
     if command
         .as_deref()
-        .is_some_and(|command| command != "migrate")
+        .is_some_and(|command| !matches!(command, "migrate" | "provision-database-role"))
     {
-        anyhow::bail!("supported commands: healthcheck, migrate");
+        anyhow::bail!("supported commands: healthcheck, migrate, provision-database-role");
     }
+
+    if matches!(
+        command.as_deref(),
+        Some("migrate" | "provision-database-role")
+    ) {
+        let log_filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "backend=info".to_owned());
+        if log_filter.trim().is_empty() {
+            anyhow::bail!("RUST_LOG must not be empty");
+        }
+        init_tracing(&log_filter)?;
+        let database_config = DatabaseConfig::from_env()?;
+        let database = Database::connect_with(&database_config).await?;
+
+        if command.as_deref() == Some("migrate") {
+            if !database_config.run_migrations {
+                anyhow::bail!("the migrate command requires RUN_MIGRATIONS=true");
+            }
+            tracing::info!("database_migrations_completed");
+            return Ok(());
+        }
+
+        if database_config.run_migrations {
+            anyhow::bail!("the provision-database-role command requires RUN_MIGRATIONS=false");
+        }
+        let role = RuntimeDatabaseRole::from_env()?;
+        database.provision_runtime_role(&role).await?;
+        tracing::info!(role = %role.name, "database_runtime_role_provisioned");
+        return Ok(());
+    }
+
     let config = Config::from_env()?;
     init_tracing(&config.log_filter)?;
     let database = Database::connect(&config).await?;
-    if command.as_deref() == Some("migrate") {
-        if !config.run_migrations {
-            anyhow::bail!("the migrate command requires RUN_MIGRATIONS=true");
-        }
-        tracing::info!("database_migrations_completed");
-        return Ok(());
-    }
     let mut state = AppState::with_database(database.clone());
     let email = EmailService::from_config(database.clone(), &config.email, state.metrics.clone())?;
     let email_dispatcher = email.as_ref().map(EmailService::spawn_dispatcher);

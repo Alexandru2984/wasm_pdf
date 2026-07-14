@@ -18,6 +18,13 @@ pub struct Config {
 }
 
 #[derive(Clone)]
+pub struct DatabaseConfig {
+    pub url: String,
+    pub max_connections: u32,
+    pub run_migrations: bool,
+}
+
+#[derive(Clone)]
 pub struct AuthConfig {
     pub jwt_secret: String,
     pub jwt_issuer: String,
@@ -42,6 +49,11 @@ pub struct EmailConfig {
     pub smtp_tls: SmtpTls,
     pub from_address: String,
     pub from_name: String,
+}
+
+pub struct RuntimeDatabaseRole {
+    pub name: String,
+    pub password: String,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -82,15 +94,7 @@ impl Config {
         if log_filter.trim().is_empty() {
             bail!("RUST_LOG must not be empty");
         }
-        let database_url = database_url()?;
-        let database_max_connections = std::env::var("DATABASE_MAX_CONNECTIONS")
-            .unwrap_or_else(|_| "10".to_owned())
-            .parse::<u32>()
-            .context("DATABASE_MAX_CONNECTIONS must be a positive integer")?;
-        if database_max_connections == 0 || database_max_connections > 100 {
-            bail!("DATABASE_MAX_CONNECTIONS must be between 1 and 100");
-        }
-        let run_migrations = parse_bool("RUN_MIGRATIONS", true)?;
+        let database = DatabaseConfig::from_env()?;
         let jwt_secret = required_secret("JWT_SECRET")?;
         if jwt_secret.len() < 32 {
             bail!("JWT_SECRET must contain at least 32 bytes");
@@ -107,7 +111,7 @@ impl Config {
 
         if environment == Environment::Production {
             validate_production(
-                &database_url,
+                &database.url,
                 &jwt_secret,
                 cookie_secure,
                 &webauthn_rp_id,
@@ -121,9 +125,9 @@ impl Config {
             host,
             port,
             log_filter,
-            database_url,
-            database_max_connections,
-            run_migrations,
+            database_url: database.url,
+            database_max_connections: database.max_connections,
+            run_migrations: database.run_migrations,
             auth: AuthConfig {
                 jwt_secret,
                 jwt_issuer,
@@ -141,6 +145,64 @@ impl Config {
 
     pub const fn socket_address(&self) -> SocketAddr {
         SocketAddr::new(self.host, self.port)
+    }
+}
+
+impl DatabaseConfig {
+    /// Load only `PostgreSQL` settings for isolated migration and provisioning
+    /// jobs that must not receive authentication or SMTP secrets.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for invalid, missing, or placeholder database settings.
+    pub fn from_env() -> anyhow::Result<Self> {
+        let url = database_url()?;
+        let max_connections = std::env::var("DATABASE_MAX_CONNECTIONS")
+            .unwrap_or_else(|_| "10".to_owned())
+            .parse::<u32>()
+            .context("DATABASE_MAX_CONNECTIONS must be a positive integer")?;
+        if max_connections == 0 || max_connections > 100 {
+            bail!("DATABASE_MAX_CONNECTIONS must be between 1 and 100");
+        }
+        let run_migrations = parse_bool("RUN_MIGRATIONS", true)?;
+        if parse_environment()? == Environment::Production && url.contains("change-me") {
+            bail!("DATABASE password placeholder is forbidden in production");
+        }
+        Ok(Self {
+            url,
+            max_connections,
+            run_migrations,
+        })
+    }
+}
+
+impl RuntimeDatabaseRole {
+    /// Load the least-privilege runtime role requested by the provisioning
+    /// command.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for missing credentials or an unsafe role identifier.
+    pub fn from_env() -> anyhow::Result<Self> {
+        let name = nonempty_env("DATABASE_RUNTIME_USER", "pdf_editor_runtime")?;
+        let mut bytes = name.bytes();
+        let valid_first = bytes
+            .next()
+            .is_some_and(|byte| matches!(byte, b'a'..=b'z' | b'_'));
+        if name.len() > 63
+            || !valid_first
+            || !bytes.all(|byte| matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'_'))
+        {
+            bail!("DATABASE_RUNTIME_USER must be a lowercase PostgreSQL identifier");
+        }
+        let password = required_secret("DATABASE_RUNTIME_PASSWORD")?;
+        if password.len() < 43
+            || password.contains("change-me")
+            || password.contains("replace-with")
+        {
+            bail!("DATABASE_RUNTIME_PASSWORD must be a non-placeholder 256-bit secret");
+        }
+        Ok(Self { name, password })
     }
 }
 
