@@ -5,6 +5,7 @@ mod lifecycle;
 mod model;
 mod passkey;
 mod rate_limit;
+mod recovery;
 mod service;
 
 pub use http::router;

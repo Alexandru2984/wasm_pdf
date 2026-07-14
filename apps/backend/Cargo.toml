@@ -17,6 +17,7 @@ email_address = { version = "0.2.9", default-features = false }
 getrandom.workspace = true
 hmac.workspace = true
 jsonwebtoken.workspace = true
+lettre.workspace = true
 prometheus-client.workspace = true
 serde.workspace = true
 serde_json.workspace = true

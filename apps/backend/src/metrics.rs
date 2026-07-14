@@ -30,6 +30,11 @@ struct PdfDurationLabels {
     operation: String,
 }
 
+#[derive(Clone, Debug, EncodeLabelSet, Eq, Hash, PartialEq)]
+struct EmailDeliveryLabels {
+    status: String,
+}
+
 /// Application metrics and their immutable `OpenMetrics` registry.
 #[derive(Clone)]
 pub struct Metrics {
@@ -38,6 +43,7 @@ pub struct Metrics {
     http_duration: Family<HttpDurationLabels, Histogram>,
     pdf_operations: Family<PdfOperationLabels, Counter>,
     pdf_duration: Family<PdfDurationLabels, Histogram>,
+    email_deliveries: Family<EmailDeliveryLabels, Counter>,
 }
 
 impl Metrics {
@@ -50,6 +56,7 @@ impl Metrics {
         let pdf_duration = Family::<PdfDurationLabels, Histogram>::new_with_constructor(|| {
             Histogram::new([0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0])
         });
+        let email_deliveries = Family::<EmailDeliveryLabels, Counter>::default();
 
         let mut registry = Registry::default();
         registry.register(
@@ -72,6 +79,11 @@ impl Metrics {
             "Client-side PDF operation processing time in seconds",
             pdf_duration.clone(),
         );
+        registry.register(
+            "pdf_editor_email_deliveries",
+            "Email outbox delivery attempts by bounded outcome",
+            email_deliveries.clone(),
+        );
 
         Self {
             registry: Arc::new(registry),
@@ -79,6 +91,7 @@ impl Metrics {
             http_duration,
             pdf_operations,
             pdf_duration,
+            email_deliveries,
         }
     }
 
@@ -110,6 +123,15 @@ impl Metrics {
                 operation: operation.to_owned(),
             })
             .observe(duration_seconds);
+    }
+
+    pub fn observe_email_delivery(&self, status: &str) {
+        debug_assert!(matches!(status, "sent" | "retry" | "dead"));
+        self.email_deliveries
+            .get_or_create(&EmailDeliveryLabels {
+                status: status.to_owned(),
+            })
+            .inc();
     }
 
     /// Encode all metrics using the `OpenMetrics` text format.

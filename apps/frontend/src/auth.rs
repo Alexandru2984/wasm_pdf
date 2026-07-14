@@ -24,8 +24,15 @@ extern "C" {
 pub struct PublicUser {
     pub id: Uuid,
     pub email: String,
+    pub email_verified: bool,
     pub display_name: String,
     pub mfa_required: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum AccountAction {
+    VerifyEmail(String),
+    ResetPassword(String),
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -85,16 +92,74 @@ pub fn auth_panel(props: &AuthPanelProps) -> Html {
     let busy = use_state(|| false);
     let error = use_state(|| None::<String>);
     let settings_open = use_state(|| false);
+    let recovery_mode = use_state(|| false);
+    let recovery_password = use_state(String::new);
+    let account_action = use_state(account_action_from_location);
+    let notice = use_state(|| None::<String>);
+
+    {
+        let has_account_action = account_action.is_some();
+        use_effect_with(has_account_action, move |has_account_action| {
+            if *has_account_action {
+                clear_account_action_url();
+            }
+            || ()
+        });
+    }
 
     {
         let on_session = props.on_session.clone();
+        let account_action = (*account_action).clone();
         use_effect_with((), move |()| {
-            if let Some(csrf_token) = load_csrf() {
+            if account_action.is_none()
+                && let Some(csrf_token) = load_csrf()
+            {
                 spawn_local(async move {
                     match refresh_session(&csrf_token).await {
                         Ok(session) => set_authenticated(&on_session, session),
                         Err(_) => clear_auth(&on_session),
                     }
+                });
+            }
+            || ()
+        });
+    }
+
+    {
+        let action = (*account_action).clone();
+        let account_action = account_action.clone();
+        let notice = notice.clone();
+        let error = error.clone();
+        let session = props.session.clone();
+        let on_session = props.on_session.clone();
+        use_effect_with(action, move |action| {
+            if let Some(AccountAction::VerifyEmail(token)) = action.clone() {
+                spawn_local(async move {
+                    let body = serde_json::json!({ "token": token });
+                    match json_empty("/api/v1/auth/email/verification/confirm", &body).await {
+                        Ok(()) => {
+                            if let Some(mut session) = session {
+                                session.user.email_verified = true;
+                                set_authenticated(&on_session, session);
+                            } else if let Some(csrf_token) = load_csrf()
+                                && let Ok(session) = refresh_session(&csrf_token).await
+                            {
+                                set_authenticated(&on_session, session);
+                            }
+                            notice.set(Some(
+                                "Email verificat. Te poți autentifica în siguranță.".to_owned(),
+                            ));
+                        }
+                        Err(message) => {
+                            error.set(Some(message));
+                            if let Some(csrf_token) = load_csrf()
+                                && let Ok(session) = refresh_session(&csrf_token).await
+                            {
+                                set_authenticated(&on_session, session);
+                            }
+                        }
+                    }
+                    account_action.set(None);
                 });
             }
             || ()
@@ -247,14 +312,130 @@ pub fn auth_panel(props: &AuthPanelProps) -> Html {
         })
     };
 
+    let request_recovery = {
+        let email = email.clone();
+        let busy = busy.clone();
+        let error = error.clone();
+        let notice = notice.clone();
+        Callback::from(move |event: SubmitEvent| {
+            event.prevent_default();
+            busy.set(true);
+            error.set(None);
+            notice.set(None);
+            let body = serde_json::json!({ "email": email.trim() });
+            let busy = busy.clone();
+            let error = error.clone();
+            let notice = notice.clone();
+            spawn_local(async move {
+                match json_empty("/api/v1/auth/password/reset/request", &body).await {
+                    Ok(()) => notice.set(Some(
+                        "Dacă adresa există, instrucțiunile au fost trimise.".to_owned(),
+                    )),
+                    Err(message) => error.set(Some(message)),
+                }
+                busy.set(false);
+            });
+        })
+    };
+
+    let confirm_recovery = {
+        let account_action = account_action.clone();
+        let recovery_password = recovery_password.clone();
+        let busy = busy.clone();
+        let error = error.clone();
+        let notice = notice.clone();
+        let on_session = props.on_session.clone();
+        Callback::from(move |event: SubmitEvent| {
+            event.prevent_default();
+            let Some(AccountAction::ResetPassword(token)) = (*account_action).clone() else {
+                return;
+            };
+            busy.set(true);
+            error.set(None);
+            notice.set(None);
+            let body = serde_json::json!({
+                "token": token,
+                "new_password": recovery_password.as_str(),
+            });
+            let busy = busy.clone();
+            let error = error.clone();
+            let notice = notice.clone();
+            let recovery_password = recovery_password.clone();
+            let account_action = account_action.clone();
+            let on_session = on_session.clone();
+            spawn_local(async move {
+                match json_empty("/api/v1/auth/password/reset/confirm", &body).await {
+                    Ok(()) => {
+                        recovery_password.set(String::new());
+                        account_action.set(None);
+                        clear_auth(&on_session);
+                        notice.set(Some(
+                            "Parola a fost schimbată. Toate sesiunile vechi au fost revocate."
+                                .to_owned(),
+                        ));
+                    }
+                    Err(message) => error.set(Some(message)),
+                }
+                busy.set(false);
+            });
+        })
+    };
+
+    let resend_verification = {
+        let session = props.session.clone();
+        let busy = busy.clone();
+        let error = error.clone();
+        let notice = notice.clone();
+        Callback::from(move |_| {
+            let Some(session) = session.clone() else {
+                return;
+            };
+            busy.set(true);
+            error.set(None);
+            notice.set(None);
+            let busy = busy.clone();
+            let error = error.clone();
+            let notice = notice.clone();
+            spawn_local(async move {
+                match authorized_empty(
+                    "POST",
+                    "/api/v1/auth/email/verification/request",
+                    &session.access_token,
+                )
+                .await
+                {
+                    Ok(()) => notice.set(Some("Emailul de verificare a fost retrimis.".to_owned())),
+                    Err(message) => error.set(Some(message)),
+                }
+                busy.set(false);
+            });
+        })
+    };
+
     html! {
         <section class="account-panel" aria-labelledby="account-title">
-            if let Some(session) = &props.session {
+            if let Some(AccountAction::ResetPassword(_)) = &*account_action {
+                <div class="section-heading compact-heading">
+                    <div>
+                        <p class="step">{"RECUPERARE CONT"}</p>
+                        <h2 id="account-title">{"Alege o parolă nouă"}</h2>
+                    </div>
+                </div>
+                <form class="auth-form" onsubmit={confirm_recovery}>
+                    <AuthInput id="recovery-password" label="Parola nouă" value={recovery_password.clone()} input_type="password" autocomplete="new-password" />
+                    <button class="process-button account-submit" type="submit" disabled={*busy}>
+                        {if *busy { "Se verifică…" } else { "Resetează parola" }}
+                    </button>
+                </form>
+            } else if let Some(session) = &props.session {
                 <div class="account-summary">
                     <div>
                         <p class="step">{"CONT ACTIV"}</p>
                         <h2 id="account-title">{&session.user.display_name}</h2>
                         <p class="account-email">{&session.user.email}</p>
+                        <p class={classes!("verification-state", (!session.user.email_verified).then_some("pending"))}>
+                            {if session.user.email_verified { "Email verificat" } else { "Email neverificat" }}
+                        </p>
                     </div>
                     <div class="account-actions">
                         <button class="secondary-button" type="button" onclick={{
@@ -266,6 +447,11 @@ pub fn auth_panel(props: &AuthPanelProps) -> Html {
                         <button class="secondary-button" type="button" onclick={on_logout} disabled={*busy}>
                             {"Logout"}
                         </button>
+                        if !session.user.email_verified {
+                            <button class="text-button" type="button" onclick={resend_verification} disabled={*busy}>
+                                {"Retrimite verificarea"}
+                            </button>
+                        }
                     </div>
                 </div>
                 if *settings_open {
@@ -275,29 +461,45 @@ pub fn auth_panel(props: &AuthPanelProps) -> Html {
                 <div class="section-heading compact-heading">
                     <div>
                         <p class="step">{"CONT OPȚIONAL"}</p>
-                        <h2 id="account-title">{if *register_mode { "Creează cont" } else { "Autentificare" }}</h2>
+                        <h2 id="account-title">{if *recovery_mode { "Recuperează contul" } else if *register_mode { "Creează cont" } else { "Autentificare" }}</h2>
                     </div>
                     <button class="text-button" type="button" onclick={{
                         let register_mode = register_mode.clone();
+                        let recovery_mode = recovery_mode.clone();
                         let error = error.clone();
                         Callback::from(move |_| {
                             register_mode.set(!*register_mode);
+                            recovery_mode.set(false);
                             error.set(None);
                         })
                     }}>
                         {if *register_mode { "Am deja cont" } else { "Cont nou" }}
                     </button>
                 </div>
-                <form class="auth-form" onsubmit={on_submit}>
-                    if *register_mode {
+                <form class="auth-form" onsubmit={if *recovery_mode { request_recovery } else { on_submit }}>
+                    if *register_mode && !*recovery_mode {
                         <AuthInput id="display-name" label="Nume afișat" value={display_name.clone()} input_type="text" autocomplete="name" />
                     }
                     <AuthInput id="auth-email" label="Email" value={email.clone()} input_type="email" autocomplete="email" />
-                    <AuthInput id="auth-password" label="Parolă" value={password.clone()} input_type="password" autocomplete={if *register_mode { "new-password" } else { "current-password" }} />
+                    if !*recovery_mode {
+                        <AuthInput id="auth-password" label="Parolă" value={password.clone()} input_type="password" autocomplete={if *register_mode { "new-password" } else { "current-password" }} />
+                    }
                     <button class="process-button account-submit" type="submit" disabled={*busy}>
-                        {if *busy { "Se verifică…" } else if *register_mode { "Creează cont" } else { "Intră în cont" }}
+                        {if *busy { "Se verifică…" } else if *recovery_mode { "Trimite instrucțiunile" } else if *register_mode { "Creează cont" } else { "Intră în cont" }}
                     </button>
                 </form>
+                if !*register_mode {
+                    <button class="text-button" type="button" onclick={{
+                        let recovery_mode = recovery_mode.clone();
+                        let error = error.clone();
+                        Callback::from(move |_| {
+                            recovery_mode.set(!*recovery_mode);
+                            error.set(None);
+                        })
+                    }}>
+                        {if *recovery_mode { "Înapoi la autentificare" } else { "Am uitat parola" }}
+                    </button>
+                }
                 if let Some(challenge) = mfa_challenge.as_ref() {
                     <div class="mfa-fallback">
                         <p>{format!("Passkey-ul nu a putut fi folosit. Ceremony: {}", challenge.ceremony_id)}</p>
@@ -308,6 +510,9 @@ pub fn auth_panel(props: &AuthPanelProps) -> Html {
             }
             if let Some(message) = &*error {
                 <div class="notice error" role="alert">{message}</div>
+            }
+            if let Some(message) = &*notice {
+                <div class="notice" role="status">{message}</div>
             }
         </section>
     }
@@ -839,6 +1044,15 @@ async fn authenticate(path: &str, body: &Value) -> Result<LoginResult, String> {
         .map(|response| LoginResult::Authenticated(response.into()))
 }
 
+async fn json_empty(path: &str, body: &Value) -> Result<(), String> {
+    let request = Request::post(path)
+        .credentials(RequestCredentials::SameOrigin)
+        .json(body)
+        .map_err(|error| error.to_string())?;
+    let response = request.send().await.map_err(|error| error.to_string())?;
+    parse_empty(response).await
+}
+
 async fn refresh_session(csrf_token: &str) -> Result<AuthSession, String> {
     let response = Request::post("/api/v1/auth/refresh")
         .credentials(RequestCredentials::SameOrigin)
@@ -1066,6 +1280,34 @@ fn store_csrf(value: &str) {
 
 fn session_storage() -> Option<web_sys::Storage> {
     web_sys::window()?.session_storage().ok().flatten()
+}
+
+fn account_action_from_location() -> Option<AccountAction> {
+    let location = web_sys::window()?.location();
+    let path = location.pathname().ok()?;
+    let search = location.search().ok()?;
+    let token = search
+        .trim_start_matches('?')
+        .split('&')
+        .find_map(|pair| pair.split_once('=').filter(|(key, _)| *key == "token"))?
+        .1
+        .to_owned();
+    if token.is_empty() {
+        return None;
+    }
+    match path.as_str() {
+        "/verify-email" => Some(AccountAction::VerifyEmail(token)),
+        "/reset-password" => Some(AccountAction::ResetPassword(token)),
+        _ => None,
+    }
+}
+
+fn clear_account_action_url() {
+    if let Some(window) = web_sys::window()
+        && let Ok(history) = window.history()
+    {
+        let _ = history.replace_state_with_url(&JsValue::NULL, "", Some("/"));
+    }
 }
 
 fn js_error(value: &JsValue) -> String {

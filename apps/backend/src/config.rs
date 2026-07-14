@@ -14,6 +14,7 @@ pub struct Config {
     pub database_max_connections: u32,
     pub run_migrations: bool,
     pub auth: AuthConfig,
+    pub email: EmailConfig,
 }
 
 #[derive(Clone)]
@@ -27,6 +28,26 @@ pub struct AuthConfig {
     pub webauthn_rp_id: String,
     pub webauthn_rp_origin: String,
     pub webauthn_rp_name: String,
+}
+
+#[derive(Clone)]
+pub struct EmailConfig {
+    pub enabled: bool,
+    pub public_base_url: Url,
+    pub token_secret: String,
+    pub smtp_host: String,
+    pub smtp_port: u16,
+    pub smtp_username: Option<String>,
+    pub smtp_password: Option<String>,
+    pub smtp_tls: SmtpTls,
+    pub from_address: String,
+    pub from_name: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SmtpTls {
+    StartTls,
+    None,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -82,6 +103,7 @@ impl Config {
         let webauthn_rp_id = nonempty_env("WEBAUTHN_RP_ID", "localhost")?;
         let webauthn_rp_origin = nonempty_env("WEBAUTHN_RP_ORIGIN", "http://localhost:8080")?;
         let webauthn_rp_name = nonempty_env("WEBAUTHN_RP_NAME", "PDF Editor")?;
+        let email = email_config(&webauthn_rp_origin)?;
 
         if environment == Environment::Production {
             validate_production(
@@ -90,6 +112,7 @@ impl Config {
                 cookie_secure,
                 &webauthn_rp_id,
                 &webauthn_rp_origin,
+                &email,
             )?;
         }
 
@@ -112,6 +135,7 @@ impl Config {
                 webauthn_rp_origin,
                 webauthn_rp_name,
             },
+            email,
         })
     }
 
@@ -140,6 +164,19 @@ impl Default for Config {
                 webauthn_rp_id: "localhost".to_owned(),
                 webauthn_rp_origin: "http://localhost:8080".to_owned(),
                 webauthn_rp_name: "PDF Editor".to_owned(),
+            },
+            email: EmailConfig {
+                enabled: false,
+                public_base_url: Url::parse("http://localhost:8080")
+                    .expect("the default public URL is valid"),
+                token_secret: String::new(),
+                smtp_host: "localhost".to_owned(),
+                smtp_port: 1025,
+                smtp_username: None,
+                smtp_password: None,
+                smtp_tls: SmtpTls::None,
+                from_address: "no-reply@localhost".to_owned(),
+                from_name: "PDF Editor".to_owned(),
             },
         }
     }
@@ -223,6 +260,7 @@ fn validate_production(
     cookie_secure: bool,
     webauthn_rp_id: &str,
     webauthn_rp_origin: &str,
+    email: &EmailConfig,
 ) -> anyhow::Result<()> {
     if !cookie_secure {
         bail!("COOKIE_SECURE must be true in production");
@@ -243,7 +281,98 @@ fn validate_production(
     if database_url.contains("change-me") {
         bail!("DATABASE password placeholder is forbidden in production");
     }
+    if !email.enabled {
+        bail!("EMAIL_DELIVERY_ENABLED must be true in production");
+    }
+    if email.smtp_tls != SmtpTls::StartTls {
+        bail!("SMTP_TLS must be starttls in production");
+    }
+    if email.public_base_url.scheme() != "https" {
+        bail!("PUBLIC_BASE_URL must use https in production");
+    }
+    let webauthn_origin =
+        Url::parse(webauthn_rp_origin).context("WEBAUTHN_RP_ORIGIN must be an absolute URL")?;
+    if email.public_base_url.host_str() != webauthn_origin.host_str() {
+        bail!("PUBLIC_BASE_URL and WEBAUTHN_RP_ORIGIN must use the same host");
+    }
+    if email.token_secret.len() < 43
+        || email.token_secret == jwt_secret
+        || email.token_secret.contains("replace-with")
+    {
+        bail!("EMAIL_TOKEN_SECRET must be a distinct non-placeholder 256-bit secret");
+    }
     Ok(())
+}
+
+fn email_config(default_base_url: &str) -> anyhow::Result<EmailConfig> {
+    let enabled = parse_bool("EMAIL_DELIVERY_ENABLED", false)?;
+    let public_base_url = Url::parse(
+        &std::env::var("PUBLIC_BASE_URL").unwrap_or_else(|_| default_base_url.to_owned()),
+    )
+    .context("PUBLIC_BASE_URL must be an absolute URL")?;
+    if !matches!(public_base_url.scheme(), "http" | "https") || public_base_url.host().is_none() {
+        bail!("PUBLIC_BASE_URL must be an absolute http(s) URL");
+    }
+    if !public_base_url.username().is_empty()
+        || public_base_url.password().is_some()
+        || public_base_url.query().is_some()
+        || public_base_url.fragment().is_some()
+    {
+        bail!("PUBLIC_BASE_URL must not contain credentials, a query, or a fragment");
+    }
+    let token_secret = optional_secret("EMAIL_TOKEN_SECRET")?.unwrap_or_default();
+    if enabled && token_secret.len() < 32 {
+        bail!("EMAIL_TOKEN_SECRET must contain at least 32 bytes when email is enabled");
+    }
+    let smtp_host = nonempty_env("SMTP_HOST", "localhost")?;
+    let smtp_port = std::env::var("SMTP_PORT")
+        .unwrap_or_else(|_| "1025".to_owned())
+        .parse::<u16>()
+        .context("SMTP_PORT must be a valid TCP port")?;
+    if smtp_port == 0 {
+        bail!("SMTP_PORT must not be zero");
+    }
+    let smtp_username = optional_nonempty_env("SMTP_USERNAME")?;
+    let smtp_password = optional_secret("SMTP_PASSWORD")?;
+    if smtp_username.is_some() != smtp_password.is_some() {
+        bail!("SMTP_USERNAME and SMTP_PASSWORD must be configured together");
+    }
+    let smtp_tls = match std::env::var("SMTP_TLS")
+        .unwrap_or_else(|_| "none".to_owned())
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "starttls" => SmtpTls::StartTls,
+        "none" => SmtpTls::None,
+        _ => bail!("SMTP_TLS must be starttls or none"),
+    };
+    let from_address = nonempty_env("SMTP_FROM_ADDRESS", "no-reply@localhost")?;
+    if !email_address::EmailAddress::is_valid(&from_address) {
+        bail!("SMTP_FROM_ADDRESS must be a valid email address");
+    }
+    let from_name = nonempty_env("SMTP_FROM_NAME", "PDF Editor")?;
+
+    Ok(EmailConfig {
+        enabled,
+        public_base_url,
+        token_secret,
+        smtp_host,
+        smtp_port,
+        smtp_username,
+        smtp_password,
+        smtp_tls,
+        from_address,
+        from_name,
+    })
+}
+
+fn optional_nonempty_env(name: &str) -> anyhow::Result<Option<String>> {
+    match std::env::var(name) {
+        Ok(value) if value.trim().is_empty() => bail!("{name} must not be empty"),
+        Ok(value) => Ok(Some(value)),
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(error) => Err(error).with_context(|| format!("could not read {name}")),
+    }
 }
 
 fn nonempty_env(name: &str, default: &str) -> anyhow::Result<String> {
@@ -288,6 +417,18 @@ mod tests {
                 true,
                 "pdf.example.com",
                 "https://pdf.example.com",
+                &EmailConfig {
+                    enabled: true,
+                    public_base_url: Url::parse("https://pdf.example.com").unwrap(),
+                    token_secret: "b".repeat(43),
+                    smtp_host: "smtp.example.com".to_owned(),
+                    smtp_port: 587,
+                    smtp_username: Some("app".to_owned()),
+                    smtp_password: Some("secret".to_owned()),
+                    smtp_tls: SmtpTls::StartTls,
+                    from_address: "no-reply@example.com".to_owned(),
+                    from_name: "PDF Editor".to_owned(),
+                },
             )
             .is_ok()
         );
@@ -298,6 +439,18 @@ mod tests {
                 false,
                 "localhost",
                 "http://localhost:8080",
+                &EmailConfig {
+                    enabled: false,
+                    public_base_url: Url::parse("http://localhost:8080").unwrap(),
+                    token_secret: String::new(),
+                    smtp_host: "localhost".to_owned(),
+                    smtp_port: 1025,
+                    smtp_username: None,
+                    smtp_password: None,
+                    smtp_tls: SmtpTls::None,
+                    from_address: "no-reply@localhost".to_owned(),
+                    from_name: "PDF Editor".to_owned(),
+                },
             )
             .is_err()
         );

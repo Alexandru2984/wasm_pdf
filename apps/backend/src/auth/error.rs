@@ -12,6 +12,7 @@ pub enum AuthError {
     InvalidMfa,
     EmailTaken,
     NotFound,
+    InvalidAccountToken,
     RateLimited { retry_after: u64 },
     Unavailable,
     Internal(String),
@@ -77,6 +78,11 @@ impl IntoResponse for AuthError {
                 StatusCode::NOT_FOUND,
                 "not_found",
                 "The requested resource does not exist.",
+            ),
+            Self::InvalidAccountToken => (
+                StatusCode::BAD_REQUEST,
+                "invalid_account_token",
+                "The account action link is invalid or expired.",
             ),
             Self::RateLimited { .. } => unreachable!("handled before the error mapping"),
             Self::Unavailable => (

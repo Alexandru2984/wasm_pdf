@@ -1,5 +1,5 @@
 use anyhow::Context;
-use backend::{AppState, AuthService, Config, Database, build_router, init_tracing};
+use backend::{AppState, AuthService, Config, Database, EmailService, build_router, init_tracing};
 use std::{
     io::{Read, Write},
     net::{Ipv4Addr, SocketAddrV4, TcpStream},
@@ -28,15 +28,19 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("database_migrations_completed");
         return Ok(());
     }
-    let auth = AuthService::new(database.clone(), &config.auth)
+    let mut state = AppState::with_database(database.clone());
+    let email = EmailService::from_config(database.clone(), &config.email, state.metrics.clone())?;
+    let email_dispatcher = email.as_ref().map(EmailService::spawn_dispatcher);
+    let auth = AuthService::new(database.clone(), &config.auth, email)
         .await
         .map_err(|error| anyhow::anyhow!("could not initialize authentication: {error:?}"))?;
+    state.auth = Some(auth);
 
     let address = config.socket_address();
     let listener = tokio::net::TcpListener::bind(address)
         .await
         .with_context(|| format!("could not bind backend to {address}"))?;
-    let app = build_router(AppState::with_services(database, auth));
+    let app = build_router(state);
 
     tracing::info!(%address, version = env!("CARGO_PKG_VERSION"), "backend_started");
     axum::serve(listener, app)
@@ -44,6 +48,9 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("backend server failed")?;
     tracing::info!("backend_stopped");
+    if let Some(dispatcher) = email_dispatcher {
+        dispatcher.abort();
+    }
 
     Ok(())
 }

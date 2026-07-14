@@ -17,19 +17,23 @@ Caddy in front of the application for automatic HTTPS.
 ## Create host secrets
 
 Secrets live outside the checkout and must never be committed. Create distinct
-random values for PostgreSQL, JWT signing and Grafana:
+random values for PostgreSQL, JWT signing, account-link signing and Grafana.
+Write the SMTP credential supplied by the provider separately:
 
 ```bash
 sudo install -d -m 0700 /etc/wasm-pdf-editor/secrets
 openssl rand -base64 48 | sudo tee /etc/wasm-pdf-editor/secrets/postgres_password >/dev/null
 openssl rand -base64 48 | sudo tee /etc/wasm-pdf-editor/secrets/jwt_secret >/dev/null
+openssl rand -base64 48 | sudo tee /etc/wasm-pdf-editor/secrets/email_token_secret >/dev/null
 openssl rand -base64 48 | sudo tee /etc/wasm-pdf-editor/secrets/grafana_admin_password >/dev/null
+printf '%s' "$SMTP_PROVIDER_PASSWORD" | sudo tee /etc/wasm-pdf-editor/secrets/smtp_password >/dev/null
 sudo chmod 0600 /etc/wasm-pdf-editor/secrets/*
 ```
 
-The backend accepts `DATABASE_PASSWORD_FILE`, `JWT_SECRET_FILE` and, when a
-complete external connection string is needed, `DATABASE_URL_FILE`. Setting a
-value and its `_FILE` variant simultaneously is rejected.
+The backend accepts `DATABASE_PASSWORD_FILE`, `JWT_SECRET_FILE`,
+`EMAIL_TOKEN_SECRET_FILE`, `SMTP_PASSWORD_FILE` and, when a complete external
+connection string is needed, `DATABASE_URL_FILE`. Setting a value and its
+`_FILE` variant simultaneously is rejected.
 
 ## Render and start
 
@@ -40,6 +44,10 @@ export PUBLIC_DOMAIN=pdf.example.com
 export BACKEND_IMAGE=ghcr.io/owner/repository-backend:sha-<commit>
 export FRONTEND_IMAGE=ghcr.io/owner/repository-frontend:sha-<commit>
 export SECRETS_DIR=/etc/wasm-pdf-editor/secrets
+export SMTP_HOST=smtp.provider.example
+export SMTP_PORT=587
+export SMTP_USERNAME=provider-account
+export SMTP_FROM_ADDRESS=no-reply@example.com
 ```
 
 Validate the merged model before every rollout:
@@ -55,7 +63,11 @@ curl --fail https://$PUBLIC_DOMAIN/health/ready
 Caddy obtains and renews the certificate and redirects HTTP to HTTPS. The
 backend refuses to start in `APP_ENV=production` unless cookies are secure,
 WebAuthn uses an HTTPS origin and public RP ID, and the JWT/database secrets are
-not development placeholders.
+not development placeholders. Email delivery must be active over STARTTLS, and
+its signing secret must be distinct from the JWT secret.
+
+Local Compose runs Mailpit on `http://127.0.0.1:8025`; it is removed entirely by
+the production override and must never be exposed as a production relay.
 
 The `migrate` service runs embedded SQLx migrations to completion before the
 backend starts. Backend replicas use `RUN_MIGRATIONS=false`, so schema changes

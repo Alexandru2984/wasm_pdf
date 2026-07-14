@@ -11,10 +11,11 @@ use crate::AppState;
 
 use super::error::AuthError;
 use super::model::{
-    AuthResponse, BackupCodeLoginRequest, BackupCodesRegenerateRequest, BackupCodesResponse,
-    ChangePasswordRequest, LoginOutcome, LoginRequest, MeResponse, PasskeyListResponse,
-    PasskeyLoginFinishRequest, PasskeyRegistrationChallenge, PasskeyRegistrationFinishRequest,
-    PasskeyRegistrationResponse, PasskeyRegistrationStartRequest, PasswordConfirmationRequest,
+    AccountTokenRequest, AuthResponse, BackupCodeLoginRequest, BackupCodesRegenerateRequest,
+    BackupCodesResponse, ChangePasswordRequest, LoginOutcome, LoginRequest, MeResponse,
+    PasskeyListResponse, PasskeyLoginFinishRequest, PasskeyRegistrationChallenge,
+    PasskeyRegistrationFinishRequest, PasskeyRegistrationResponse, PasskeyRegistrationStartRequest,
+    PasswordConfirmationRequest, PasswordResetConfirmRequest, PasswordResetRequest,
     RegisterRequest, SessionBundle, SessionListResponse, UpdateProfileRequest,
 };
 use super::rate_limit::RateLimitCategory;
@@ -62,6 +63,93 @@ pub fn router() -> Router<AppState> {
             delete(remove_passkey),
         )
         .route("/api/v1/auth/mfa/disable", post(disable_mfa))
+        .route(
+            "/api/v1/auth/email/verification/request",
+            post(request_email_verification),
+        )
+        .route(
+            "/api/v1/auth/email/verification/confirm",
+            post(confirm_email_verification),
+        )
+        .route(
+            "/api/v1/auth/password/reset/request",
+            post(request_password_reset),
+        )
+        .route(
+            "/api/v1/auth/password/reset/confirm",
+            post(confirm_password_reset),
+        )
+}
+
+async fn request_email_verification(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<StatusCode, AuthError> {
+    let auth = auth_service(&state)?;
+    let access_token = bearer_token(&headers)?;
+    auth.enforce_rate_limit(RateLimitCategory::AccountMutation, access_token)
+        .await?;
+    auth.request_email_verification(access_token, request_context(&headers))
+        .await?;
+    Ok(StatusCode::ACCEPTED)
+}
+
+async fn confirm_email_verification(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<AccountTokenRequest>,
+) -> Result<StatusCode, AuthError> {
+    let auth = auth_service(&state)?;
+    auth.enforce_rate_limit(
+        RateLimitCategory::RecoveryConfirm,
+        client_ip(&headers).unwrap_or("unknown"),
+    )
+    .await?;
+    auth.enforce_rate_limit(RateLimitCategory::RecoveryConfirm, &request.token)
+        .await?;
+    auth.confirm_email_verification(&request.token, request_context(&headers))
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn request_password_reset(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<PasswordResetRequest>,
+) -> Result<StatusCode, AuthError> {
+    let auth = auth_service(&state)?;
+    auth.enforce_rate_limit(
+        RateLimitCategory::RecoveryIp,
+        client_ip(&headers).unwrap_or("unknown"),
+    )
+    .await?;
+    auth.enforce_rate_limit(
+        RateLimitCategory::RecoveryIdentity,
+        &request.email.trim().to_lowercase(),
+    )
+    .await?;
+    auth.request_password_reset(request, request_context(&headers))
+        .await?;
+    Ok(StatusCode::ACCEPTED)
+}
+
+async fn confirm_password_reset(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    headers: HeaderMap,
+    Json(request): Json<PasswordResetConfirmRequest>,
+) -> Result<impl IntoResponse, AuthError> {
+    let auth = auth_service(&state)?;
+    auth.enforce_rate_limit(
+        RateLimitCategory::RecoveryConfirm,
+        client_ip(&headers).unwrap_or("unknown"),
+    )
+    .await?;
+    auth.enforce_rate_limit(RateLimitCategory::RecoveryConfirm, &request.token)
+        .await?;
+    auth.confirm_password_reset(request, request_context(&headers))
+        .await?;
+    Ok((remove_session_cookie(jar, auth), StatusCode::NO_CONTENT))
 }
 
 async fn register(
@@ -480,6 +568,10 @@ mod tests {
                 "/api/v1/auth/passkeys/11111111-1111-4111-8111-111111111111",
             ),
             (Method::POST, "/api/v1/auth/mfa/disable"),
+            (Method::POST, "/api/v1/auth/email/verification/request"),
+            (Method::POST, "/api/v1/auth/email/verification/confirm"),
+            (Method::POST, "/api/v1/auth/password/reset/request"),
+            (Method::POST, "/api/v1/auth/password/reset/confirm"),
         ];
 
         for (method, uri) in routes {

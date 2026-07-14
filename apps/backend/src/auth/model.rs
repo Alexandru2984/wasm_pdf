@@ -65,10 +65,27 @@ pub struct PasswordConfirmationRequest {
     pub password: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct AccountTokenRequest {
+    pub token: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PasswordResetRequest {
+    pub email: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PasswordResetConfirmRequest {
+    pub token: String,
+    pub new_password: String,
+}
+
 #[derive(Clone, Debug, FromRow)]
 pub struct UserRecord {
     pub id: Uuid,
     pub email: String,
+    pub email_verified_at: Option<OffsetDateTime>,
     pub display_name: String,
     pub password_hash: String,
     pub status: String,
@@ -83,6 +100,7 @@ pub struct SessionUserRecord {
     pub session_id: Uuid,
     pub user_id: Uuid,
     pub email: String,
+    pub email_verified_at: Option<OffsetDateTime>,
     pub display_name: String,
     pub status: String,
     pub mfa_required: bool,
@@ -93,6 +111,7 @@ pub struct SessionUserRecord {
 pub struct PublicUser {
     pub id: Uuid,
     pub email: String,
+    pub email_verified: bool,
     pub display_name: String,
     pub mfa_required: bool,
 }
@@ -102,6 +121,7 @@ impl From<&UserRecord> for PublicUser {
         Self {
             id: user.id,
             email: user.email.clone(),
+            email_verified: user.email_verified_at.is_some(),
             display_name: user.display_name.clone(),
             mfa_required: user.mfa_required,
         }
@@ -113,6 +133,7 @@ impl From<&SessionUserRecord> for PublicUser {
         Self {
             id: user.user_id,
             email: user.email.clone(),
+            email_verified: user.email_verified_at.is_some(),
             display_name: user.display_name.clone(),
             mfa_required: user.mfa_required,
         }

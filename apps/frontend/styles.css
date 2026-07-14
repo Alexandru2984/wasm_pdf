@@ -78,6 +78,19 @@ select {
   color: var(--muted);
 }
 
+.verification-state {
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: 0.35rem 0 0;
+  text-transform: uppercase;
+}
+
+.verification-state.pending {
+  color: #ffb35c;
+}
+
 .auth-form {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -24,10 +24,15 @@ sesiunea din claim-ul `sid` este încă activă în PostgreSQL.
   revocă toate sesiunile și creează atomic o singură sesiune nouă;
 - profilul poate fi actualizat, iar ștergerea contului cere din nou parola și
   elimină datele de identitate prin cascadele PostgreSQL.
+- verificarea emailului și recuperarea parolei folosesc linkuri semnate,
+  one-time, cu expirare; resetarea parolei revocă toate sesiunile și păstrează
+  MFA activ.
 
 Răspunsul de autentificare conține JWT-ul, tokenul CSRF și profilul public.
-Clientul păstrează JWT-ul și CSRF-ul numai în memorie; cookie-ul de sesiune este
-gestionat de browser și nu este accesibil JavaScript-ului.
+Clientul păstrează JWT-ul numai în memorie. Tokenul CSRF rămâne în
+`sessionStorage` pentru restaurarea aceleiași file după reload, iar cookie-ul de
+sesiune este `HttpOnly` și nu este accesibil JavaScript-ului. Sesiunea este
+rotită periodic înainte de expirarea JWT-ului.
 
 ## Proprietăți de securitate
 
@@ -47,6 +52,25 @@ gestionat de browser și nu este accesibil JavaScript-ului.
   iar răspunsurile limitate includ `Retry-After`;
 - user-agent-ul este limitat la 512 bytes, iar erorile externe nu dezvăluie
   existența contului la login.
+
+## Email și recuperare
+
+Înregistrarea creează utilizatorul, tokenul de verificare și intrarea de outbox
+în aceeași tranzacție PostgreSQL. Workerul SMTP revendică mesaje cu
+`FOR UPDATE SKIP LOCKED`, folosește STARTTLS obligatoriu în producție și aplică
+retry exponențial, maximum opt încercări. Stările `sent`, `retry` și `dead` sunt
+expuse ca metrici cu cardinalitate limitată; adresele și linkurile nu apar în
+loguri.
+Tokenurile expirate sunt șterse după șapte zile, iar înregistrările consumate și
+mesajele lor de outbox după 30 de zile.
+
+Linkurile conțin un UUID aleator și o semnătură HMAC-SHA-256 peste ID,
+utilizator, scop și expirare. Secretul este separat de cheia JWT. Tokenul brut
+nu este stocat în DB sau outbox și este reconstruit numai la livrare. Linkul de
+verificare expiră în 24 de ore, iar cel de resetare în 30 de minute. Ambele sunt
+consumate atomic și refuză replay-ul. Cererea publică de resetare răspunde
+identic pentru adrese existente și inexistente și este limitată per IP și per
+identitate pseudonimizată.
 
 ## Passkeys și coduri de backup
 
@@ -89,11 +113,18 @@ prin HTTPS. Valorile din Compose sunt numai pentru dezvoltare.
 | `WEBAUTHN_RP_ID` | `localhost` | domeniu stabil, compatibil cu origin |
 | `WEBAUTHN_RP_ORIGIN` | `http://localhost:8080` | origin exact; HTTPS în producție |
 | `WEBAUTHN_RP_NAME` | `PDF Editor` | nume afișat de authenticator |
+| `EMAIL_DELIVERY_ENABLED` | `false` în proces | obligatoriu `true` în producție |
+| `PUBLIC_BASE_URL` | origin-ul WebAuthn | URL absolut; HTTPS în producție |
+| `EMAIL_TOKEN_SECRET` | fără implicit în proces | minimum 32 bytes, distinct de JWT |
+| `SMTP_HOST` / `SMTP_PORT` | `localhost:1025` | relay SMTP; port nenul |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | fără implicit | se configurează împreună |
+| `SMTP_TLS` | `none` | `starttls` obligatoriu în producție |
+| `SMTP_FROM_ADDRESS` | `no-reply@localhost` | adresă validă și verificată la provider |
+| `SMTP_FROM_NAME` | `PDF Editor` | nume nevid |
 
 ## Funcționalități rămase
 
-UI-ul browser pentru autentificare, sesiuni, profil și ciclul complet
-passkey/MFA este livrat. Verificarea emailului și recuperarea asistată a contului
-rămân verticale separate. Testele browser pentru ceremonia WebAuthn vor folosi un
-authenticator virtual; testele API verifică între timp origin/RP, persistența
-server-side și expirarea challenge-ului.
+UI-ul browser pentru autentificare, sesiuni, profil, email, recuperare și ciclul
+complet passkey/MFA este livrat. Testele browser pentru ceremonia WebAuthn vor
+folosi un authenticator virtual; testele API verifică între timp origin/RP,
+persistența server-side și expirarea challenge-ului.

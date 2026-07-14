@@ -539,7 +539,7 @@ impl AuthService {
     ) -> Result<(AccessClaims, UserRecord), AuthError> {
         let claims = self.decode_access_token(access_token)?;
         let user = query_as::<_, UserRecord>(
-            r"SELECT u.id, u.email, u.display_name, u.password_hash, u.status,
+            r"SELECT u.id, u.email, u.email_verified_at, u.display_name, u.password_hash, u.status,
                       u.mfa_required, u.token_version, u.failed_login_attempts, u.locked_until
                FROM users u JOIN sessions s ON s.user_id = u.id
                WHERE u.id = $1 AND s.id = $2 AND s.revoked_at IS NULL
@@ -617,7 +617,7 @@ async fn load_user(
     user_id: Uuid,
 ) -> Result<UserRecord, AuthError> {
     query_as::<_, UserRecord>(
-        r"SELECT id, email, display_name, password_hash, status, mfa_required,
+        r"SELECT id, email, email_verified_at, display_name, password_hash, status, mfa_required,
                   token_version, failed_login_attempts, locked_until
            FROM users WHERE id = $1 AND status = 'active'",
     )

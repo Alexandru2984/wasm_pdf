@@ -55,7 +55,8 @@ WASM. The same engine boundary is intended for PDF/A conversion, redact and sign
 Password authentication, rotating database sessions and short-lived JWTs are
 delivered and documented in [authentication.md](authentication.md).
 WebAuthn/passkeys, backup codes and their browser management UI are delivered,
-with virtual-authenticator browser E2E still tracked separately. Webhooks,
+as are email verification, password recovery and the durable SMTP outbox.
+Virtual-authenticator browser E2E is still tracked separately. Webhooks,
 AI/RAG and R2/S3 are
 separate production features;
 they must not be advertised as complete until their threat models and

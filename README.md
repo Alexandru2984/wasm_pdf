@@ -142,6 +142,10 @@ Build-ul de producție al frontend-ului instalează versiunile fixate de
 | `POST` | `/api/v1/auth/mfa/disable` | eliminarea tuturor factorilor după reconfirmarea parolei |
 | `POST` | `/api/v1/auth/mfa/backup-code` | consumă un cod one-time după etapa de parolă |
 | `POST` | `/api/v1/auth/mfa/backup-codes/regenerate` | înlocuiește codurile după reconfirmarea parolei |
+| `POST` | `/api/v1/auth/email/verification/request` | retrimite verificarea pentru contul autentificat |
+| `POST` | `/api/v1/auth/email/verification/confirm` | consumă linkul one-time de verificare |
+| `POST` | `/api/v1/auth/password/reset/request` | răspuns generic și email de recuperare, dacă identitatea există |
+| `POST` | `/api/v1/auth/password/reset/confirm` | schimbă parola și revocă toate sesiunile |
 | `POST` | `/api/v1/telemetry/pdf-operations` | rezultat și durată, fără bytes PDF |
 
 Exemplu de telemetrie acceptată:
@@ -170,6 +174,9 @@ sunt păstrate pentru inventarul de dispozitive și evenimentele de audit.
 După înrolarea unui passkey, login-ul corect cu parolă răspunde `202` cu un
 challenge WebAuthn; cookie-ul și JWT-ul sunt emise numai după assertion valid
 sau consumarea unui cod de backup.
+Verificarea emailului și resetarea parolei sunt livrate printr-un outbox
+PostgreSQL durabil și SMTP STARTTLS. Linkurile sunt semnate HMAC-SHA-256 cu o
+cheie separată, nu sunt stocate în clar și sunt consumate atomic o singură dată.
 
 ## Contractul Web Worker
 

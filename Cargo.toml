@@ -26,6 +26,7 @@ gloo = "0.11.0"
 hmac = "0.13.0"
 js-sys = "0.3.83"
 jsonwebtoken = { version = "10.4.0", default-features = false, features = ["aws_lc_rs"] }
+lettre = { version = "0.11.22", default-features = false, features = ["builder", "hostname", "pool", "smtp-transport", "tokio1-rustls-tls", "tracing"] }
 lopdf = { version = "0.44.0", default-features = false, features = ["wasm_js"] }
 pdf-engine = { path = "crates/pdf-engine" }
 prometheus-client = "0.25.0"

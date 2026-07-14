@@ -46,7 +46,9 @@ nu prin înlocuirea arbitrară a lui `lopdf`.
 - rotație/revocare și audit pentru register/login/refresh/logout — livrate;
 - inventar și revocare dispozitive, schimbare parolă cu revocare globală,
   profil, ștergere cont și lifecycle MFA/passkey — backend și UI livrate;
-- recuperare cont și testele complete de autorizare negative.
+- verificare email, recuperare parolă, outbox SMTP durabil și teste anti-replay
+  end-to-end — livrate;
+- testele complete de autorizare negative și browser E2E WebAuthn.
 
 Înainte de implementare se fixează threat model-ul, schema de tenancy și
 politicile de retenție. Endpoint-urile de identitate nu vor fi amestecate cu

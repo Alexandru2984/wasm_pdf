@@ -91,6 +91,9 @@ jobs:
           BACKEND_IMAGE: ghcr.io/example/wasm-pdf-backend:sha-test
           FRONTEND_IMAGE: ghcr.io/example/wasm-pdf-frontend:sha-test
           PUBLIC_DOMAIN: pdf.example.invalid
+          SMTP_HOST: smtp.example.invalid
+          SMTP_USERNAME: ci-account
+          SMTP_FROM_ADDRESS: no-reply@example.invalid
         run: docker compose -f docker-compose.yml -f compose.production.yml config --quiet
 
       - name: Validate GitHub Actions workflows

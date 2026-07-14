@@ -24,6 +24,9 @@ pub enum RateLimitCategory {
     LogoutSession,
     MfaCeremony,
     AccountMutation,
+    RecoveryIp,
+    RecoveryIdentity,
+    RecoveryConfirm,
 }
 
 impl RateLimitCategory {
@@ -37,6 +40,9 @@ impl RateLimitCategory {
             Self::LogoutSession => ("logout_session", 30, 60),
             Self::MfaCeremony => ("mfa_ceremony", 10, 300),
             Self::AccountMutation => ("account_mutation", 30, 300),
+            Self::RecoveryIp => ("recovery_ip", 20, 3_600),
+            Self::RecoveryIdentity => ("recovery_identity", 5, 3_600),
+            Self::RecoveryConfirm => ("recovery_confirm", 10, 900),
         }
     }
 }

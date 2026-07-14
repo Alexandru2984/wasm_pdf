@@ -38,12 +38,24 @@ services:
       WEBAUTHN_RP_ID: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the application DNS name}
       WEBAUTHN_RP_ORIGIN: https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the application DNS name}
       WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-PDF Editor}
-    depends_on:
+      EMAIL_DELIVERY_ENABLED: "true"
+      PUBLIC_BASE_URL: https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the application DNS name}
+      EMAIL_TOKEN_SECRET_FILE: /run/secrets/email_token_secret
+      SMTP_HOST: ${SMTP_HOST:?Set the production SMTP relay host}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:?Set the production SMTP username}
+      SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+      SMTP_TLS: starttls
+      SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:?Set the verified sender address}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-PDF Editor}
+    depends_on: !override
       postgres:
         condition: service_healthy
     secrets:
       - postgres_password
       - jwt_secret
+      - email_token_secret
+      - smtp_password
     networks:
       - app
     read_only: true
@@ -63,6 +75,7 @@ services:
       DATABASE_PASSWORD: !reset null
       DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-10}
       JWT_SECRET: !reset null
+      EMAIL_TOKEN_SECRET: !reset null
       RUN_MIGRATIONS: "false"
     depends_on:
       postgres:
@@ -72,8 +85,12 @@ services:
     secrets:
       - postgres_password
       - jwt_secret
+      - email_token_secret
+      - smtp_password
     cap_drop:
       - ALL
+
+  mailpit: !reset null
 
   frontend:
     image: ${FRONTEND_IMAGE:?Set FRONTEND_IMAGE to an immutable sha tag or digest}
@@ -127,6 +144,10 @@ secrets:
     file: ${SECRETS_DIR:-/etc/wasm-pdf-editor/secrets}/postgres_password
   jwt_secret:
     file: ${SECRETS_DIR:-/etc/wasm-pdf-editor/secrets}/jwt_secret
+  email_token_secret:
+    file: ${SECRETS_DIR:-/etc/wasm-pdf-editor/secrets}/email_token_secret
+  smtp_password:
+    file: ${SECRETS_DIR:-/etc/wasm-pdf-editor/secrets}/smtp_password
   grafana_admin_password:
     file: ${SECRETS_DIR:-/etc/wasm-pdf-editor/secrets}/grafana_admin_password
 

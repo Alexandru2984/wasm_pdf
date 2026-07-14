@@ -6,7 +6,7 @@ use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 use webauthn_rs::prelude::{Url, Webauthn, WebauthnBuilder};
 
-use crate::{AuthConfig, Database};
+use crate::{AuthConfig, Database, EmailService};
 
 use super::crypto::{hash_password, random_token, token_hash, verify_password};
 use super::error::AuthError;
@@ -39,6 +39,7 @@ pub struct AuthService {
     cookie_secure: bool,
     dummy_password_hash: String,
     rate_limiter: RateLimiter,
+    pub(super) email: Option<EmailService>,
     pub(super) webauthn: Webauthn,
 }
 
@@ -49,7 +50,11 @@ impl AuthService {
     /// # Errors
     ///
     /// Returns an error if the password hashing worker cannot initialize.
-    pub async fn new(database: Database, config: &AuthConfig) -> Result<Self, AuthError> {
+    pub async fn new(
+        database: Database,
+        config: &AuthConfig,
+        email: Option<EmailService>,
+    ) -> Result<Self, AuthError> {
         let mut validation = Validation::new(Algorithm::HS256);
         validation.set_issuer(&[&config.jwt_issuer]);
         validation.set_audience(&[&config.jwt_audience]);
@@ -74,6 +79,7 @@ impl AuthService {
             cookie_secure: config.cookie_secure,
             dummy_password_hash,
             rate_limiter,
+            email,
             webauthn,
         })
     }
@@ -118,7 +124,7 @@ impl AuthService {
         let user = query_as::<_, UserRecord>(
             r"INSERT INTO users (id, email, email_normalized, display_name, password_hash)
                VALUES ($1, $2, $3, $4, $5)
-               RETURNING id, email, display_name, password_hash, status, mfa_required,
+               RETURNING id, email, email_verified_at, display_name, password_hash, status, mfa_required,
                          token_version, failed_login_attempts, locked_until",
         )
         .bind(user_id)
@@ -129,6 +135,12 @@ impl AuthService {
         .fetch_one(&mut *transaction)
         .await
         .map_err(map_registration_error)?;
+        if let Some(email) = &self.email {
+            email
+                .queue_verification(&mut transaction, user.id, &user.email, &user.display_name)
+                .await
+                .map_err(AuthError::internal)?;
+        }
         let bundle = self
             .create_session(&mut transaction, &user, context)
             .await?;
@@ -160,7 +172,7 @@ impl AuthService {
             return Err(AuthError::InvalidCredentials);
         }
         let user = query_as::<_, UserRecord>(
-            r"SELECT id, email, display_name, password_hash, status, mfa_required,
+            r"SELECT id, email, email_verified_at, display_name, password_hash, status, mfa_required,
                       token_version, failed_login_attempts, locked_until
                FROM users WHERE email_normalized = $1",
         )
@@ -240,7 +252,7 @@ impl AuthService {
         let csrf_hash = token_hash(csrf_token);
         let current = query_as::<_, RefreshRecord>(
             r"SELECT s.id AS session_id, s.csrf_token_hash, u.id AS id,
-                      u.email, u.display_name, u.password_hash, u.status,
+                      u.email, u.email_verified_at, u.display_name, u.password_hash, u.status,
                       u.mfa_required, u.token_version, u.failed_login_attempts,
                       u.locked_until
                FROM sessions s JOIN users u ON u.id = s.user_id
@@ -339,7 +351,7 @@ impl AuthService {
     pub async fn me(&self, access_token: &str) -> Result<MeResponse, AuthError> {
         let claims = self.decode_access_token(access_token)?;
         let record = query_as::<_, SessionUserRecord>(
-            r"SELECT s.id AS session_id, u.id AS user_id, u.email, u.display_name,
+            r"SELECT s.id AS session_id, u.id AS user_id, u.email, u.email_verified_at, u.display_name,
                       u.status, u.mfa_required, u.token_version
                FROM sessions s JOIN users u ON u.id = s.user_id
                WHERE s.id = $1 AND u.id = $2 AND s.revoked_at IS NULL
@@ -503,7 +515,7 @@ fn validate_email(value: &str) -> Result<String, AuthError> {
     Ok(normalized)
 }
 
-fn normalize_email_for_login(value: &str) -> String {
+pub(super) fn normalize_email_for_login(value: &str) -> String {
     value.trim().to_lowercase()
 }
 

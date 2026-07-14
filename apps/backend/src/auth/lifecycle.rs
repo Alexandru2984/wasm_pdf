@@ -143,7 +143,7 @@ impl AuthService {
                SET password_hash = $2, token_version = token_version + 1,
                    failed_login_attempts = 0, locked_until = NULL, updated_at = now()
                WHERE id = $1 AND token_version = $3
-               RETURNING id, email, display_name, password_hash, status, mfa_required,
+               RETURNING id, email, email_verified_at, display_name, password_hash, status, mfa_required,
                          token_version, failed_login_attempts, locked_until",
         )
         .bind(user.id)
@@ -192,7 +192,7 @@ impl AuthService {
         let updated = query_as::<_, UserRecord>(
             r"UPDATE users SET display_name = $2, updated_at = now()
                WHERE id = $1
-               RETURNING id, email, display_name, password_hash, status, mfa_required,
+               RETURNING id, email, email_verified_at, display_name, password_hash, status, mfa_required,
                          token_version, failed_login_attempts, locked_until",
         )
         .bind(user.id)
