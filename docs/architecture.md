@@ -46,6 +46,10 @@ Observability
   database and AWS SDK adapters.
 - Native readiness checks PostgreSQL with a live query. Migration execution can
   be disabled for deployments that use a separate migration job.
+- Caddy and Axum independently cap request bodies at 1 MiB, and Axum applies a
+  30-second request deadline; PDF bytes never traverse these routes.
+- The frontend image computes CSP hashes for Trunk's generated inline bootstrap
+  at build time, so production does not permit arbitrary inline JavaScript.
 
 ## Delivery roadmap
 

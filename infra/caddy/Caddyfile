@@ -3,7 +3,18 @@
 
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Embedder-Policy "require-corp"
+		Cross-Origin-Resource-Policy "same-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		Referrer-Policy "no-referrer"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
 		-Server
+	}
+
+	request_body {
+		max_size 1MB
 	}
 
 	handle /api/* {

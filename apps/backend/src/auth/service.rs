@@ -2,6 +2,7 @@ use email_address::EmailAddress;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use sqlx::postgres::PgDatabaseError;
 use sqlx::{Postgres, Transaction, query, query_as};
+use subtle::ConstantTimeEq;
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 use webauthn_rs::prelude::{Url, Webauthn, WebauthnBuilder};
@@ -264,7 +265,12 @@ impl AuthService {
         .await
         .map_err(AuthError::internal)?
         .ok_or(AuthError::Unauthorized)?;
-        if current.csrf_token_hash != csrf_hash {
+        if !bool::from(
+            current
+                .csrf_token_hash
+                .as_slice()
+                .ct_eq(csrf_hash.as_slice()),
+        ) {
             return Err(AuthError::InvalidCsrf);
         }
         if current.user.status != "active" {

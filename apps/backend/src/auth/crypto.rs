@@ -1,5 +1,5 @@
-use argon2::Argon2;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use argon2::{Algorithm, Argon2, Params, Version};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use sha2::{Digest, Sha256};
@@ -7,11 +7,26 @@ use uuid::Uuid;
 
 use super::error::AuthError;
 
+const PASSWORD_MEMORY_KIB: u32 = 19 * 1024;
+const PASSWORD_ITERATIONS: u32 = 2;
+const PASSWORD_LANES: u32 = 1;
+
+fn password_hasher() -> Result<Argon2<'static>, AuthError> {
+    let params = Params::new(
+        PASSWORD_MEMORY_KIB,
+        PASSWORD_ITERATIONS,
+        PASSWORD_LANES,
+        None,
+    )
+    .map_err(AuthError::internal)?;
+    Ok(Argon2::new(Algorithm::Argon2id, Version::V0x13, params))
+}
+
 pub async fn hash_password(password: String) -> Result<String, AuthError> {
     tokio::task::spawn_blocking(move || {
         let salt =
             SaltString::encode_b64(Uuid::new_v4().as_bytes()).map_err(AuthError::internal)?;
-        Argon2::default()
+        password_hasher()?
             .hash_password(password.as_bytes(), &salt)
             .map(|hash| hash.to_string())
             .map_err(AuthError::internal)
@@ -23,7 +38,7 @@ pub async fn hash_password(password: String) -> Result<String, AuthError> {
 pub async fn verify_password(password: String, encoded_hash: String) -> Result<bool, AuthError> {
     tokio::task::spawn_blocking(move || {
         let parsed = PasswordHash::new(&encoded_hash).map_err(AuthError::internal)?;
-        Ok(Argon2::default()
+        Ok(password_hasher()?
             .verify_password(password.as_bytes(), &parsed)
             .is_ok())
     })
@@ -94,5 +109,18 @@ mod tests {
         let second = random_token().expect("random token");
         assert_eq!(first.len(), 43);
         assert_ne!(first, second);
+    }
+
+    #[tokio::test]
+    async fn password_hashes_pin_argon2id_parameters() {
+        let encoded = hash_password("correct horse battery staple".to_owned())
+            .await
+            .expect("password hash");
+        assert!(encoded.starts_with("$argon2id$v=19$m=19456,t=2,p=1$"));
+        assert!(
+            verify_password("correct horse battery staple".to_owned(), encoded)
+                .await
+                .expect("password verification")
+        );
     }
 }

@@ -27,6 +27,7 @@ pub enum RateLimitCategory {
     RecoveryIp,
     RecoveryIdentity,
     RecoveryConfirm,
+    TelemetryIp,
 }
 
 impl RateLimitCategory {
@@ -43,6 +44,7 @@ impl RateLimitCategory {
             Self::RecoveryIp => ("recovery_ip", 20, 3_600),
             Self::RecoveryIdentity => ("recovery_identity", 5, 3_600),
             Self::RecoveryConfirm => ("recovery_confirm", 10, 900),
+            Self::TelemetryIp => ("telemetry_ip", 240, 60),
         }
     }
 }

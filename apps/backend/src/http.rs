@@ -1,5 +1,6 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
+use axum::extract::DefaultBodyLimit;
 use axum::extract::{MatchedPath, Request, State};
 use axum::http::{HeaderName, HeaderValue, StatusCode, header};
 use axum::middleware::{self, Next};
@@ -8,6 +9,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use tower_http::catch_panic::CatchPanicLayer;
+use tower_http::timeout::TimeoutLayer;
 use tracing::Instrument;
 use uuid::Uuid;
 
@@ -26,6 +28,11 @@ pub fn router(state: AppState) -> Router {
             post(report_pdf_operation),
         )
         .fallback(not_found)
+        .layer(DefaultBodyLimit::max(1024 * 1024))
+        .layer(TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            Duration::from_secs(30),
+        ))
         .layer(CatchPanicLayer::new())
         .layer(middleware::from_fn_with_state(
             state.clone(),
@@ -81,10 +88,18 @@ async fn metrics(State(state): State<AppState>) -> Response {
 
 async fn report_pdf_operation(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Json(report): Json<PdfOperationReport>,
-) -> StatusCode {
+) -> Result<StatusCode, crate::auth::AuthError> {
+    if let Some(auth) = &state.auth {
+        auth.enforce_rate_limit(
+            crate::auth::RateLimitCategory::TelemetryIp,
+            forwarded_ip(&headers).unwrap_or("unknown"),
+        )
+        .await?;
+    }
     if !report.duration_ms.is_finite() || !(0.0..=86_400_000.0).contains(&report.duration_ms) {
-        return StatusCode::BAD_REQUEST;
+        return Ok(StatusCode::BAD_REQUEST);
     }
     state.metrics.observe_pdf_operation(
         report.operation.as_label(),
@@ -97,7 +112,16 @@ async fn report_pdf_operation(
         duration_ms = report.duration_ms,
         "pdf_operation_reported"
     );
-    StatusCode::ACCEPTED
+    Ok(StatusCode::ACCEPTED)
+}
+
+fn forwarded_ip(headers: &axum::http::HeaderMap) -> Option<&str> {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(',').next())
+        .map(str::trim)
+        .filter(|value| value.parse::<std::net::IpAddr>().is_ok())
 }
 
 async fn not_found() -> StatusCode {
@@ -294,5 +318,15 @@ mod tests {
             .expect("request");
         let response = app.oneshot(invalid).await.expect("validation response");
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let oversized = Request::post("/api/v1/telemetry/pdf-operations")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(vec![b'a'; 1024 * 1024 + 1]))
+            .expect("oversized request");
+        let response = router(AppState::new())
+            .oneshot(oversized)
+            .await
+            .expect("body limit response");
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
     }
 }

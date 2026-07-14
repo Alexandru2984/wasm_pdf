@@ -11,6 +11,8 @@ RUN rustup target add wasm32-unknown-unknown \
 COPY Cargo.toml Cargo.lock rust-toolchain.toml LICENSE ./
 COPY apps ./apps
 COPY crates ./crates
+COPY infra/nginx/nginx.conf /workspace/infra/nginx/nginx.conf
+COPY scripts/render-nginx-csp.sh /workspace/scripts/render-nginx-csp.sh
 
 RUN wasm-pack build apps/pdf-worker \
         --target web \
@@ -18,11 +20,15 @@ RUN wasm-pack build apps/pdf-worker \
         --out-dir pkg \
         --out-name pdf_worker \
     && cd apps/frontend \
-    && trunk build --release --locked
+    && trunk build --release --locked \
+    && /workspace/scripts/render-nginx-csp.sh \
+        /workspace/apps/frontend/dist/index.html \
+        /workspace/infra/nginx/nginx.conf \
+        /workspace/nginx.conf
 
 FROM nginx:1.29-alpine-slim@sha256:c9366b8c560169b101ca0e5422ed063b20779e6454c2326b9c9704225c9b0c08 AS runtime
 
-COPY infra/nginx/nginx.conf /etc/nginx/nginx.conf
+COPY --from=builder /workspace/nginx.conf /etc/nginx/nginx.conf
 COPY --from=builder /workspace/apps/frontend/dist /usr/share/nginx/html
 COPY --from=builder /workspace/apps/pdf-worker/pkg /usr/share/nginx/html/assets/pdf-worker
 COPY apps/pdf-worker/js/worker.js /usr/share/nginx/html/assets/pdf-worker/worker.js

@@ -1,5 +1,6 @@
-use axum::extract::{Path, State};
+use axum::extract::{Path, Request, State};
 use axum::http::{HeaderMap, StatusCode, header};
+use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
@@ -79,6 +80,20 @@ pub fn router() -> Router<AppState> {
             "/api/v1/auth/password/reset/confirm",
             post(confirm_password_reset),
         )
+        .layer(middleware::from_fn(auth_response_headers))
+}
+
+async fn auth_response_headers(request: Request, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        "no-store, max-age=0".parse().expect("static cache header"),
+    );
+    response.headers_mut().insert(
+        header::PRAGMA,
+        "no-cache".parse().expect("static pragma header"),
+    );
+    response
 }
 
 async fn request_email_verification(
@@ -587,6 +602,10 @@ mod tests {
                 .await
                 .expect("response");
             assert_ne!(response.status(), StatusCode::NOT_FOUND, "route {uri}");
+            assert_eq!(
+                response.headers().get(header::CACHE_CONTROL),
+                Some(&"no-store, max-age=0".parse().expect("cache header"))
+            );
         }
     }
 }

@@ -5,6 +5,13 @@ JWT Bearer de scurtă durată. Cookie-ul este folosit numai pentru refresh și
 logout; endpoint-urile protejate folosesc JWT-ul și verifică de fiecare dată că
 sesiunea din claim-ul `sid` este încă activă în PostgreSQL.
 
+Parolele folosesc Argon2id v1.3 cu parametri fixați explicit la 19 MiB memorie,
+2 iterații și un lane, plus un salt aleator per parolă. JWT-urile sunt semnate
+HS256 cu o cheie aleatoare de minimum 256 biți; tokenurile opace de sesiune și
+CSRF au câte 256 biți de entropie și în PostgreSQL rămâne numai SHA-256-ul lor.
+Comparația CSRF este constant-time. Linkurile de cont și scope-urile rate
+limiterului folosesc HMAC-SHA-256 cu separare de domeniu.
+
 ## Fluxuri
 
 - `register` validează identitatea, calculează hash-ul Argon2id într-un task
@@ -40,6 +47,7 @@ rotită periodic înainte de expirarea JWT-ului.
   cu salt aleator;
 - tokenurile opace au 256 de biți de entropie, iar baza de date păstrează numai
   digesturi SHA-256;
+- toate răspunsurile `/api/v1/auth/*` au `Cache-Control: no-store`;
 - refresh-ul este single-use inclusiv sub cereri concurente;
 - cookie-ul are `Path=/api/v1/auth`, `HttpOnly` și `SameSite=Strict`; `Secure`
   este implicit activ și poate fi dezactivat numai pentru dezvoltarea HTTP;
