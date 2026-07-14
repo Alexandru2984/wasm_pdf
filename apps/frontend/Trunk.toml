@@ -1,0 +1,15 @@
+[build]
+target = "index.html"
+dist = "dist"
+public_url = "/"
+filehash = true
+minify = "on_release"
+
+[watch]
+watch = ["src", "styles.css", "index.html"]
+
+[serve]
+address = "127.0.0.1"
+port = 8081
+open = false
+

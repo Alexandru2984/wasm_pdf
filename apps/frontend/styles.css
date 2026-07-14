@@ -1,0 +1,339 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #f2f2e9;
+  background: #10130f;
+  font-synthesis: none;
+  --paper: #f2f2e9;
+  --ink: #151713;
+  --acid: #d9ff43;
+  --muted: #a6aa9e;
+  --line: rgba(242, 242, 233, 0.15);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 75% 5%, rgba(217, 255, 67, 0.1), transparent 28rem),
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    #10130f;
+  background-size: auto, 42px 42px, 42px 42px, auto;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.shell {
+  width: min(1120px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 72px 0 36px;
+}
+
+.hero {
+  max-width: 840px;
+  margin-bottom: 56px;
+}
+
+.eyebrow,
+.step {
+  margin: 0 0 14px;
+  color: var(--acid);
+  font: 500 0.73rem/1.3 ui-monospace, "SFMono-Regular", Consolas, monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 20px;
+  font-size: clamp(4rem, 12vw, 9rem);
+  line-height: 0.82;
+  letter-spacing: -0.075em;
+}
+
+h2 {
+  margin-bottom: 0;
+  font-size: clamp(1.5rem, 3vw, 2.2rem);
+  letter-spacing: -0.04em;
+}
+
+.lede {
+  max-width: 680px;
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: clamp(1rem, 2vw, 1.22rem);
+  line-height: 1.65;
+}
+
+.workspace {
+  position: relative;
+  padding: clamp(24px, 5vw, 58px);
+  color: var(--ink);
+  background: var(--paper);
+  border-radius: 2px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.32);
+}
+
+.workspace::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  opacity: 0.18;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.11'/%3E%3C/svg%3E");
+}
+
+.workspace > * {
+  position: relative;
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 38px;
+}
+
+.workspace .step {
+  color: #5f6657;
+}
+
+.privacy-pill {
+  padding: 8px 12px;
+  border: 1px solid #909786;
+  border-radius: 100px;
+  font: 500 0.68rem/1 ui-monospace, "SFMono-Regular", Consolas, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.field-label {
+  display: block;
+  margin: 0 0 9px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+select,
+.range-field input {
+  width: 100%;
+  min-height: 54px;
+  padding: 0 16px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid #9fa495;
+  border-radius: 0;
+  outline: none;
+}
+
+select:focus,
+.range-field input:focus {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px rgba(21, 23, 19, 0.12);
+}
+
+.upload-zone {
+  margin: 24px 0;
+  border: 1px dashed #7f8576;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.upload-zone:hover {
+  background: rgba(217, 255, 67, 0.18);
+  border-color: #515747;
+}
+
+.upload-label {
+  display: grid;
+  place-items: center;
+  min-height: 220px;
+  padding: 32px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.upload-label strong {
+  margin: 14px 0 6px;
+  font-size: 1.15rem;
+}
+
+.upload-label span:last-child,
+.range-field small,
+.file-summary {
+  color: #62685b;
+  font-size: 0.82rem;
+}
+
+.upload-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: 50%;
+  font-size: 1.5rem;
+}
+
+.file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.file-summary {
+  margin: -10px 20px 16px;
+  text-align: center;
+}
+
+.range-field {
+  margin: 24px 0;
+}
+
+.range-field small {
+  display: block;
+  margin-top: 8px;
+}
+
+.process-button {
+  display: flex;
+  width: 100%;
+  min-height: 60px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 28px;
+  color: #12140f;
+  background: var(--acid);
+  border: 1px solid #12140f;
+  cursor: pointer;
+  font-weight: 700;
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+
+.process-button:not(:disabled):hover {
+  transform: translate(-3px, -3px);
+  box-shadow: 6px 6px 0 #12140f;
+}
+
+.process-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(18, 20, 15, 0.25);
+  border-top-color: #12140f;
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.notice {
+  margin-top: 20px;
+  padding: 15px 18px;
+  border-left: 4px solid;
+  font-size: 0.9rem;
+}
+
+.notice.error {
+  color: #641f17;
+  background: #ffddd8;
+  border-color: #b83a2c;
+}
+
+.results {
+  margin-top: 48px;
+  padding-top: 32px;
+  border-top: 1px solid #afb3a7;
+}
+
+.download-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.download-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 17px 18px;
+  color: inherit;
+  border: 1px solid #a1a697;
+  text-decoration: none;
+}
+
+.download-link:hover {
+  color: var(--paper);
+  background: var(--ink);
+}
+
+footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 26px 0 0;
+  color: #777c72;
+  font: 400 0.7rem/1.5 ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+@media (max-width: 640px) {
+  .shell {
+    width: min(100% - 24px, 1120px);
+    padding-top: 42px;
+  }
+
+  .hero {
+    margin-bottom: 36px;
+  }
+
+  .section-heading,
+  footer {
+    flex-direction: column;
+  }
+
+  .privacy-pill {
+    align-self: flex-start;
+  }
+
+  .upload-label {
+    min-height: 180px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

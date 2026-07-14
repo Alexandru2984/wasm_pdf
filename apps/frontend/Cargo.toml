@@ -7,8 +7,28 @@ license.workspace = true
 description = "Yew browser UI for local-first PDF processing"
 
 [dependencies]
+gloo.workspace = true
+js-sys.workspace = true
+serde.workspace = true
+serde_bytes = "0.11.19"
+serde-wasm-bindgen = "0.6.5"
+uuid.workspace = true
+wasm-bindgen.workspace = true
+wasm-bindgen-futures = "0.4.56"
+web-sys = { workspace = true, features = [
+    "Blob",
+    "Event",
+    "File",
+    "FileList",
+    "HtmlInputElement",
+    "HtmlSelectElement",
+    "MessageEvent",
+    "Url",
+    "Worker",
+    "WorkerOptions",
+    "WorkerType",
+] }
 yew.workspace = true
 
 [lints]
 workspace = true
-
