@@ -9,12 +9,17 @@ description = "Low-latency API and integration backend for the PDF editor"
 [dependencies]
 anyhow.workspace = true
 axum.workspace = true
+prometheus-client.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 tokio.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+uuid.workspace = true
 
 [lints]
 workspace = true
 
+[dev-dependencies]
+tower.workspace = true
