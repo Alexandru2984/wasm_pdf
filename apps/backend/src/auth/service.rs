@@ -4,14 +4,15 @@ use sqlx::postgres::PgDatabaseError;
 use sqlx::{Postgres, Transaction, query, query_as};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
+use webauthn_rs::prelude::{Url, Webauthn, WebauthnBuilder};
 
 use crate::{AuthConfig, Database};
 
 use super::crypto::{hash_password, random_token, token_hash, verify_password};
 use super::error::AuthError;
 use super::model::{
-    AccessClaims, AuthResponse, LoginRequest, MeResponse, PublicUser, RegisterRequest,
-    SessionBundle, SessionUserRecord, UserRecord,
+    AccessClaims, AuthResponse, LoginOutcome, LoginRequest, MeResponse, PublicUser,
+    RegisterRequest, SessionBundle, SessionUserRecord, UserRecord,
 };
 use super::rate_limit::{RateLimitCategory, RateLimiter};
 
@@ -21,7 +22,7 @@ const SESSION_IDLE_DAYS: i64 = 7;
 
 #[derive(Clone)]
 pub struct AuthService {
-    database: Database,
+    pub(super) database: Database,
     encoding_key: EncodingKey,
     decoding_key: DecodingKey,
     validation: Validation,
@@ -32,6 +33,7 @@ pub struct AuthService {
     cookie_secure: bool,
     dummy_password_hash: String,
     rate_limiter: RateLimiter,
+    pub(super) webauthn: Webauthn,
 }
 
 impl AuthService {
@@ -48,6 +50,12 @@ impl AuthService {
         validation.leeway = 5;
         let dummy_password_hash = hash_password(random_token()).await?;
         let rate_limiter = RateLimiter::new(database.clone(), config.jwt_secret.as_bytes());
+        let origin = Url::parse(&config.webauthn_rp_origin).map_err(AuthError::internal)?;
+        let webauthn = WebauthnBuilder::new(&config.webauthn_rp_id, &origin)
+            .map_err(AuthError::internal)?
+            .rp_name(&config.webauthn_rp_name)
+            .build()
+            .map_err(AuthError::internal)?;
         Ok(Self {
             database,
             encoding_key: EncodingKey::from_secret(config.jwt_secret.as_bytes()),
@@ -60,6 +68,7 @@ impl AuthService {
             cookie_secure: config.cookie_secure,
             dummy_password_hash,
             rate_limiter,
+            webauthn,
         })
     }
 
@@ -139,7 +148,7 @@ impl AuthService {
         &self,
         request: LoginRequest,
         user_agent: Option<&str>,
-    ) -> Result<SessionBundle, AuthError> {
+    ) -> Result<LoginOutcome, AuthError> {
         let normalized = normalize_email_for_login(&request.email);
         if request.password.len() > 1_024 {
             return Err(AuthError::InvalidCredentials);
@@ -172,6 +181,12 @@ impl AuthService {
             return Err(AuthError::InvalidCredentials);
         }
 
+        if user.mfa_required {
+            let challenge = self.start_passkey_authentication(&user).await?;
+            self.reset_successful_login(&user).await?;
+            return Ok(LoginOutcome::PasskeyRequired(challenge));
+        }
+
         let mut transaction = self
             .database
             .pool()
@@ -201,7 +216,7 @@ impl AuthService {
         )
         .await?;
         transaction.commit().await.map_err(AuthError::internal)?;
-        Ok(bundle)
+        Ok(LoginOutcome::Authenticated(bundle))
     }
 
     /// Rotate a valid session after CSRF verification and issue a fresh access token.
@@ -338,13 +353,13 @@ impl AuthService {
         })
     }
 
-    fn decode_access_token(&self, token: &str) -> Result<AccessClaims, AuthError> {
+    pub(super) fn decode_access_token(&self, token: &str) -> Result<AccessClaims, AuthError> {
         decode::<AccessClaims>(token, &self.decoding_key, &self.validation)
             .map(|data| data.claims)
             .map_err(|_| AuthError::Unauthorized)
     }
 
-    async fn create_session(
+    pub(super) async fn create_session(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         user: &UserRecord,
@@ -416,6 +431,20 @@ impl AuthService {
         .map_err(AuthError::internal)?;
         Ok(())
     }
+
+    async fn reset_successful_login(&self, user: &UserRecord) -> Result<(), AuthError> {
+        query(
+            r"UPDATE users
+               SET failed_login_attempts = 0, locked_until = NULL,
+                   last_login_at = now(), updated_at = now()
+               WHERE id = $1",
+        )
+        .bind(user.id)
+        .execute(self.database.pool())
+        .await
+        .map_err(AuthError::internal)?;
+        Ok(())
+    }
 }
 
 #[derive(sqlx::FromRow)]
@@ -432,7 +461,7 @@ struct RevokedSession {
     user_id: Uuid,
 }
 
-async fn insert_audit(
+pub(super) async fn insert_audit(
     transaction: &mut Transaction<'_, Postgres>,
     user_id: Option<Uuid>,
     session_id: Option<Uuid>,

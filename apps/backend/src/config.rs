@@ -21,6 +21,9 @@ pub struct AuthConfig {
     pub access_token_seconds: i64,
     pub session_days: i64,
     pub cookie_secure: bool,
+    pub webauthn_rp_id: String,
+    pub webauthn_rp_origin: String,
+    pub webauthn_rp_name: String,
 }
 
 impl Config {
@@ -68,6 +71,9 @@ impl Config {
         let access_token_seconds = parse_i64_range("ACCESS_TOKEN_SECONDS", 900, 60, 3_600)?;
         let session_days = parse_i64_range("SESSION_DAYS", 30, 1, 90)?;
         let cookie_secure = parse_bool("COOKIE_SECURE", true)?;
+        let webauthn_rp_id = nonempty_env("WEBAUTHN_RP_ID", "localhost")?;
+        let webauthn_rp_origin = nonempty_env("WEBAUTHN_RP_ORIGIN", "http://localhost:8080")?;
+        let webauthn_rp_name = nonempty_env("WEBAUTHN_RP_NAME", "PDF Editor")?;
 
         Ok(Self {
             host,
@@ -83,6 +89,9 @@ impl Config {
                 access_token_seconds,
                 session_days,
                 cookie_secure,
+                webauthn_rp_id,
+                webauthn_rp_origin,
+                webauthn_rp_name,
             },
         })
     }
@@ -108,6 +117,9 @@ impl Default for Config {
                 access_token_seconds: 900,
                 session_days: 30,
                 cookie_secure: false,
+                webauthn_rp_id: "localhost".to_owned(),
+                webauthn_rp_origin: "http://localhost:8080".to_owned(),
+                webauthn_rp_name: "PDF Editor".to_owned(),
             },
         }
     }

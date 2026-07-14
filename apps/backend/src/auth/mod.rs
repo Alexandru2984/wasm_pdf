@@ -2,6 +2,7 @@ mod crypto;
 mod error;
 mod http;
 mod model;
+mod passkey;
 mod rate_limit;
 mod service;
 

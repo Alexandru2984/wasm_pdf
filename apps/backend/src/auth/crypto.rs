@@ -41,3 +41,51 @@ pub fn random_token() -> String {
 pub fn token_hash(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
 }
+
+pub fn generate_backup_code() -> String {
+    const ALPHABET: &[u8; 32] = b"23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+    let mut bytes = [0_u8; 32];
+    bytes[..16].copy_from_slice(Uuid::new_v4().as_bytes());
+    bytes[16..].copy_from_slice(Uuid::new_v4().as_bytes());
+    let compact = bytes
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| !matches!(index, 6 | 8 | 22 | 24))
+        .take(20)
+        .map(|(_, byte)| char::from(ALPHABET[usize::from(*byte & 31)]))
+        .collect::<String>();
+    format!(
+        "{}-{}-{}-{}-{}",
+        &compact[..4],
+        &compact[4..8],
+        &compact[8..12],
+        &compact[12..16],
+        &compact[16..]
+    )
+}
+
+pub fn normalize_backup_code(value: &str) -> Option<String> {
+    let normalized = value
+        .chars()
+        .filter(|character| *character != '-' && !character.is_ascii_whitespace())
+        .map(|character| character.to_ascii_uppercase())
+        .collect::<String>();
+    (normalized.len() == 20
+        && normalized
+            .bytes()
+            .all(|byte| b"23456789ABCDEFGHJKLMNPQRSTUVWXYZ".contains(&byte)))
+    .then_some(normalized)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn backup_codes_are_readable_and_normalizable() {
+        let code = generate_backup_code();
+        assert_eq!(code.len(), 24);
+        assert_eq!(normalize_backup_code(&code).expect("valid code").len(), 20);
+        assert!(normalize_backup_code("invalid-code").is_none());
+    }
+}

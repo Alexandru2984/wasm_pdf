@@ -1,6 +1,6 @@
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode, header};
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use axum_extra::extract::CookieJar;
@@ -10,7 +10,12 @@ use time::Duration;
 use crate::AppState;
 
 use super::error::AuthError;
-use super::model::{AuthResponse, LoginRequest, MeResponse, RegisterRequest, SessionBundle};
+use super::model::{
+    AuthResponse, BackupCodeLoginRequest, BackupCodesRegenerateRequest, BackupCodesResponse,
+    LoginOutcome, LoginRequest, MeResponse, PasskeyListResponse, PasskeyLoginFinishRequest,
+    PasskeyRegistrationChallenge, PasskeyRegistrationFinishRequest, PasskeyRegistrationResponse,
+    PasskeyRegistrationStartRequest, RegisterRequest, SessionBundle,
+};
 use super::rate_limit::RateLimitCategory;
 use super::service::AuthService;
 
@@ -24,6 +29,24 @@ pub fn router() -> Router<AppState> {
         .route("/api/v1/auth/refresh", post(refresh))
         .route("/api/v1/auth/logout", post(logout))
         .route("/api/v1/auth/me", get(me))
+        .route(
+            "/api/v1/auth/passkeys/register/start",
+            post(start_passkey_registration),
+        )
+        .route(
+            "/api/v1/auth/passkeys/register/finish",
+            post(finish_passkey_registration),
+        )
+        .route(
+            "/api/v1/auth/passkeys/login/finish",
+            post(finish_passkey_login),
+        )
+        .route("/api/v1/auth/mfa/backup-code", post(login_with_backup_code))
+        .route(
+            "/api/v1/auth/mfa/backup-codes/regenerate",
+            post(regenerate_backup_codes),
+        )
+        .route("/api/v1/auth/passkeys", get(list_passkeys))
 }
 
 async fn register(
@@ -50,7 +73,7 @@ async fn login(
     jar: CookieJar,
     headers: HeaderMap,
     Json(request): Json<LoginRequest>,
-) -> Result<impl IntoResponse, AuthError> {
+) -> Result<Response, AuthError> {
     let auth = auth_service(&state)?;
     auth.enforce_rate_limit(RateLimitCategory::LoginIp, client_ip(&headers))
         .await?;
@@ -59,9 +82,15 @@ async fn login(
         &request.email.trim().to_lowercase(),
     )
     .await?;
-    let bundle = auth.login(request, user_agent(&headers)).await?;
-    let (jar, response) = authenticated_response(jar, auth, bundle);
-    Ok((jar, Json(response)))
+    match auth.login(request, user_agent(&headers)).await? {
+        LoginOutcome::Authenticated(bundle) => {
+            let (jar, response) = authenticated_response(jar, auth, bundle);
+            Ok((jar, Json(response)).into_response())
+        }
+        LoginOutcome::PasskeyRequired(challenge) => {
+            Ok((StatusCode::ACCEPTED, Json(challenge)).into_response())
+        }
+    }
 }
 
 async fn refresh(
@@ -105,6 +134,99 @@ async fn me(
 ) -> Result<Json<MeResponse>, AuthError> {
     let auth = auth_service(&state)?;
     Ok(Json(auth.me(bearer_token(&headers)?).await?))
+}
+
+async fn start_passkey_registration(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<PasskeyRegistrationStartRequest>,
+) -> Result<Json<PasskeyRegistrationChallenge>, AuthError> {
+    let auth = auth_service(&state)?;
+    let access_token = bearer_token(&headers)?;
+    auth.enforce_rate_limit(RateLimitCategory::MfaCeremony, access_token)
+        .await?;
+    Ok(Json(
+        auth.start_passkey_registration(access_token, request)
+            .await?,
+    ))
+}
+
+async fn finish_passkey_registration(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<PasskeyRegistrationFinishRequest>,
+) -> Result<Json<PasskeyRegistrationResponse>, AuthError> {
+    let auth = auth_service(&state)?;
+    auth.enforce_rate_limit(
+        RateLimitCategory::MfaCeremony,
+        &request.ceremony_id.to_string(),
+    )
+    .await?;
+    Ok(Json(
+        auth.finish_passkey_registration(bearer_token(&headers)?, request, user_agent(&headers))
+            .await?,
+    ))
+}
+
+async fn finish_passkey_login(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    headers: HeaderMap,
+    Json(request): Json<PasskeyLoginFinishRequest>,
+) -> Result<impl IntoResponse, AuthError> {
+    let auth = auth_service(&state)?;
+    auth.enforce_rate_limit(
+        RateLimitCategory::MfaCeremony,
+        &request.ceremony_id.to_string(),
+    )
+    .await?;
+    let bundle = auth
+        .finish_passkey_login(request, user_agent(&headers))
+        .await?;
+    let (jar, response) = authenticated_response(jar, auth, bundle);
+    Ok((jar, Json(response)))
+}
+
+async fn login_with_backup_code(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    headers: HeaderMap,
+    Json(request): Json<BackupCodeLoginRequest>,
+) -> Result<impl IntoResponse, AuthError> {
+    let auth = auth_service(&state)?;
+    auth.enforce_rate_limit(
+        RateLimitCategory::MfaCeremony,
+        &request.ceremony_id.to_string(),
+    )
+    .await?;
+    let bundle = auth
+        .login_with_backup_code(request, user_agent(&headers))
+        .await?;
+    let (jar, response) = authenticated_response(jar, auth, bundle);
+    Ok((jar, Json(response)))
+}
+
+async fn list_passkeys(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<PasskeyListResponse>, AuthError> {
+    let auth = auth_service(&state)?;
+    Ok(Json(auth.list_passkeys(bearer_token(&headers)?).await?))
+}
+
+async fn regenerate_backup_codes(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<BackupCodesRegenerateRequest>,
+) -> Result<Json<BackupCodesResponse>, AuthError> {
+    let auth = auth_service(&state)?;
+    let access_token = bearer_token(&headers)?;
+    auth.enforce_rate_limit(RateLimitCategory::MfaCeremony, access_token)
+        .await?;
+    Ok(Json(
+        auth.regenerate_backup_codes(access_token, request, user_agent(&headers))
+            .await?,
+    ))
 }
 
 fn auth_service(state: &AppState) -> Result<&AuthService, AuthError> {

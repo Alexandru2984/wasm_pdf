@@ -36,9 +36,10 @@ nu prin înlocuirea arbitrară a lui `lopdf`.
 - PostgreSQL pentru utilizatori, credențiale și audit — fundație livrată;
 - sesiuni server-side cu cookie `Secure`, `HttpOnly`, `SameSite` și protecție
   CSRF, plus JWT cu durată scurtă — livrat;
-- WebAuthn/passkeys cu verificarea origin/RP ID și protecție anti-replay;
-- coduri de backup generate criptografic, afișate o singură dată și stocate
-  numai sub formă de hash;
+- WebAuthn/passkeys cu verificarea origin/RP ID, challenge server-side și
+  protecție anti-replay — backend livrat; UI și browser E2E rămân;
+- coduri de backup generate criptografic, afișate o singură dată, stocate numai
+  sub formă de hash și consumate tranzacțional — backend livrat;
 - rate limiting distribuit pe identitate, IP/sesiune și categorie de endpoint
   pentru fluxurile de autentificare — livrat;
 - rotație/revocare și audit pentru register/login/refresh/logout — livrate;

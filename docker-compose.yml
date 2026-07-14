@@ -37,6 +37,9 @@ services:
       ACCESS_TOKEN_SECONDS: ${ACCESS_TOKEN_SECONDS:-900}
       SESSION_DAYS: ${SESSION_DAYS:-30}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-localhost}
+      WEBAUTHN_RP_ORIGIN: ${WEBAUTHN_RP_ORIGIN:-http://localhost:8080}
+      WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-PDF Editor}
     depends_on:
       postgres:
         condition: service_healthy

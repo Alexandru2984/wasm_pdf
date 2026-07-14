@@ -16,7 +16,8 @@ NGINX
     └── Axum backend (apps/backend)
         ├── current: health, telemetry, metrics and PostgreSQL pool
         ├── current: password auth, rotating sessions, JWT, rate limits and audit
-        ├── planned: passkeys, backup codes, webhook and AI service adapters
+        ├── current: passkeys and one-time backup codes
+        ├── planned: webhook and AI service adapters
         ├── planned: optional R2/S3 persistence adapter
         └── structured logs + OpenMetrics endpoint
 
@@ -53,7 +54,8 @@ standard-font watermarking, bounded text extraction and AcroForm flattening in
 WASM. The same engine boundary is intended for PDF/A conversion, redact and signing.
 Password authentication, rotating database sessions and short-lived JWTs are
 delivered and documented in [authentication.md](authentication.md).
-WebAuthn/passkeys, backup codes, webhooks, AI/RAG and R2/S3 are
+WebAuthn/passkeys and backup codes are delivered at the backend boundary, with
+browser UI/E2E still tracked separately. Webhooks, AI/RAG and R2/S3 are
 separate production features;
 they must not be advertised as complete until their threat models and
 integration tests are delivered. The ordered delivery and acceptance criteria

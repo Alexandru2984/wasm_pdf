@@ -22,6 +22,7 @@ pub enum RateLimitCategory {
     LoginIdentity,
     RefreshSession,
     LogoutSession,
+    MfaCeremony,
 }
 
 impl RateLimitCategory {
@@ -33,6 +34,7 @@ impl RateLimitCategory {
             Self::LoginIdentity => ("login_identity", 10, 900),
             Self::RefreshSession => ("refresh_session", 60, 60),
             Self::LogoutSession => ("logout_session", 30, 60),
+            Self::MfaCeremony => ("mfa_ceremony", 10, 300),
         }
     }
 }

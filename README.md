@@ -123,6 +123,12 @@ Build-ul de producție al frontend-ului instalează versiunile fixate de
 | `POST` | `/api/v1/auth/refresh` | rotație sesiune; necesită cookie și `X-CSRF-Token` |
 | `POST` | `/api/v1/auth/logout` | revocare sesiune; necesită cookie și `X-CSRF-Token` |
 | `GET` | `/api/v1/auth/me` | identitatea asociată unui JWT Bearer activ |
+| `POST` | `/api/v1/auth/passkeys/register/start` | challenge de înrolare, cu JWT și reconfirmarea parolei |
+| `POST` | `/api/v1/auth/passkeys/register/finish` | verificare attestation și salvare passkey |
+| `POST` | `/api/v1/auth/passkeys/login/finish` | verificare assertion și emitere sesiune MFA |
+| `GET` | `/api/v1/auth/passkeys` | passkeys și numărul codurilor de backup rămase |
+| `POST` | `/api/v1/auth/mfa/backup-code` | consumă un cod one-time după etapa de parolă |
+| `POST` | `/api/v1/auth/mfa/backup-codes/regenerate` | înlocuiește codurile după reconfirmarea parolei |
 | `POST` | `/api/v1/telemetry/pdf-operations` | rezultat și durată, fără bytes PDF |
 
 Exemplu de telemetrie acceptată:
@@ -145,6 +151,9 @@ hash-urile tokenurilor de sesiune și CSRF, rotește sesiunea la refresh și
 invalidează imediat JWT-ul asociat sesiunii vechi. JWT-urile expiră implicit în
 15 minute și sunt reverificate față de sesiunea activă din PostgreSQL. Contractul
 și modelul de amenințări sunt descrise în [documentația de autentificare](docs/authentication.md).
+După înrolarea unui passkey, login-ul corect cu parolă răspunde `202` cu un
+challenge WebAuthn; cookie-ul și JWT-ul sunt emise numai după assertion valid
+sau consumarea unui cod de backup.
 
 ## Contractul Web Worker
 
@@ -254,8 +263,9 @@ secret, publicarea imaginilor rămâne rezultatul final al pipeline-ului.
   dimensiunea fișierului în timpul parsării. Limitele browserului rămân valabile.
 - PDF-urile criptate trebuie decriptate înainte de procesare.
 - TLS este obligatoriu înainte de expunerea publică; autentificarea prin
-  parolă/sesiune/JWT și rate limiting-ul distribuit sunt livrate, însă passkeys,
-  backup codes și recuperarea contului rămân în lucru.
+  parolă/sesiune/JWT, passkeys, backup codes și rate limiting-ul distribuit sunt
+  livrate în backend. UI-ul de administrare MFA și recuperarea asistată a
+  contului rămân în lucru.
 - Migrarea inițială include schema pentru utilizatori, sesiuni, passkeys, coduri
   backup și audit.
 - Axum nativ este ținta server principală. Un deployment Spin/WasmEdge cere

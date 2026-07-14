@@ -2,6 +2,10 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use time::OffsetDateTime;
 use uuid::Uuid;
+use webauthn_rs::prelude::{
+    CreationChallengeResponse, PublicKeyCredential, RegisterPublicKeyCredential,
+    RequestChallengeResponse,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct RegisterRequest {
@@ -13,6 +17,35 @@ pub struct RegisterRequest {
 #[derive(Debug, Deserialize)]
 pub struct LoginRequest {
     pub email: String,
+    pub password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PasskeyRegistrationStartRequest {
+    pub nickname: String,
+    pub password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PasskeyRegistrationFinishRequest {
+    pub ceremony_id: Uuid,
+    pub credential: RegisterPublicKeyCredential,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PasskeyLoginFinishRequest {
+    pub ceremony_id: Uuid,
+    pub credential: PublicKeyCredential,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BackupCodeLoginRequest {
+    pub ceremony_id: Uuid,
+    pub code: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BackupCodesRegenerateRequest {
     pub password: String,
 }
 
@@ -77,6 +110,50 @@ pub struct AuthResponse {
     pub expires_in: i64,
     pub csrf_token: String,
     pub user: PublicUser,
+}
+
+pub enum LoginOutcome {
+    Authenticated(SessionBundle),
+    PasskeyRequired(PasskeyAuthenticationChallenge),
+}
+
+#[derive(Debug, Serialize)]
+pub struct PasskeyAuthenticationChallenge {
+    pub status: &'static str,
+    pub ceremony_id: Uuid,
+    pub public_key: RequestChallengeResponse,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PasskeyRegistrationChallenge {
+    pub ceremony_id: Uuid,
+    pub public_key: CreationChallengeResponse,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PasskeyRegistrationResponse {
+    pub credential_id: Uuid,
+    pub nickname: String,
+    pub backup_codes: Vec<String>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct PasskeySummary {
+    pub id: Uuid,
+    pub nickname: String,
+    pub created_at: OffsetDateTime,
+    pub last_used_at: Option<OffsetDateTime>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PasskeyListResponse {
+    pub passkeys: Vec<PasskeySummary>,
+    pub unused_backup_codes: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BackupCodesResponse {
+    pub backup_codes: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]

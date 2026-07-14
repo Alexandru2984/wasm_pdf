@@ -9,6 +9,7 @@ pub enum AuthError {
     InvalidCredentials,
     Unauthorized,
     InvalidCsrf,
+    InvalidMfa,
     EmailTaken,
     RateLimited { retry_after: u64 },
     Unavailable,
@@ -18,6 +19,11 @@ pub enum AuthError {
 impl AuthError {
     pub fn internal(error: impl std::fmt::Display) -> Self {
         Self::Internal(error.to_string())
+    }
+
+    pub fn invalid_webauthn(error: impl std::fmt::Display) -> Self {
+        tracing::warn!(%error, "webauthn_verification_failed");
+        Self::InvalidMfa
     }
 }
 
@@ -55,6 +61,11 @@ impl IntoResponse for AuthError {
                 StatusCode::FORBIDDEN,
                 "invalid_csrf",
                 "The CSRF token is missing or invalid.",
+            ),
+            Self::InvalidMfa => (
+                StatusCode::UNAUTHORIZED,
+                "invalid_mfa",
+                "The authentication challenge or credential is invalid.",
             ),
             Self::EmailTaken => (
                 StatusCode::CONFLICT,
