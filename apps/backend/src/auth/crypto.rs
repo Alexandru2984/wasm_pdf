@@ -31,11 +31,10 @@ pub async fn verify_password(password: String, encoded_hash: String) -> Result<b
     .map_err(AuthError::internal)?
 }
 
-pub fn random_token() -> String {
+pub fn random_token() -> Result<String, AuthError> {
     let mut bytes = [0_u8; 32];
-    bytes[..16].copy_from_slice(Uuid::new_v4().as_bytes());
-    bytes[16..].copy_from_slice(Uuid::new_v4().as_bytes());
-    URL_SAFE_NO_PAD.encode(bytes)
+    getrandom::fill(&mut bytes).map_err(AuthError::internal)?;
+    Ok(URL_SAFE_NO_PAD.encode(bytes))
 }
 
 pub fn token_hash(token: &str) -> Vec<u8> {
@@ -87,5 +86,13 @@ mod tests {
         assert_eq!(code.len(), 24);
         assert_eq!(normalize_backup_code(&code).expect("valid code").len(), 20);
         assert!(normalize_backup_code("invalid-code").is_none());
+    }
+
+    #[test]
+    fn opaque_tokens_use_32_random_bytes() {
+        let first = random_token().expect("random token");
+        let second = random_token().expect("random token");
+        assert_eq!(first.len(), 43);
+        assert_ne!(first, second);
     }
 }

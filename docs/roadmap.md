@@ -43,6 +43,8 @@ nu prin înlocuirea arbitrară a lui `lopdf`.
 - rate limiting distribuit pe identitate, IP/sesiune și categorie de endpoint
   pentru fluxurile de autentificare — livrat;
 - rotație/revocare și audit pentru register/login/refresh/logout — livrate;
+- inventar și revocare dispozitive, schimbare parolă cu revocare globală,
+  profil, ștergere cont și lifecycle MFA/passkey — backend livrat;
 - recuperare cont și testele complete de autorizare negative.
 
 Înainte de implementare se fixează threat model-ul, schema de tenancy și

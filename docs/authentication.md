@@ -17,7 +17,13 @@ sesiunea din claim-ul `sid` este încă activă în PostgreSQL.
   curentă și emite o sesiune, un token CSRF și un JWT noi;
 - `logout` verifică CSRF, revocă sesiunea și șterge cookie-ul;
 - `me` validează semnătura, issuer-ul, audience-ul și expirarea JWT-ului, apoi
-  verifică sesiunea, starea utilizatorului și versiunea globală a tokenurilor.
+  verifică sesiunea, starea utilizatorului și versiunea globală a tokenurilor;
+- managementul sesiunilor listează dispozitivele active și permite revocarea
+  unei alte sesiuni sau a tuturor celorlalte sesiuni;
+- schimbarea parolei cere parola curentă, incrementează versiunea tokenurilor,
+  revocă toate sesiunile și creează atomic o singură sesiune nouă;
+- profilul poate fi actualizat, iar ștergerea contului cere din nou parola și
+  elimină datele de identitate prin cascadele PostgreSQL.
 
 Răspunsul de autentificare conține JWT-ul, tokenul CSRF și profilul public.
 Clientul păstrează JWT-ul și CSRF-ul numai în memorie; cookie-ul de sesiune este
@@ -34,8 +40,8 @@ gestionat de browser și nu este accesibil JavaScript-ului.
   este implicit activ și poate fi dezactivat numai pentru dezvoltarea HTTP;
 - JWT-urile HS256 cer un secret de cel puțin 32 de bytes, au `iss`, `aud`,
   `sub`, `sid`, `jti`, `iat`, `exp` și o versiune revocabilă;
-- evenimentele reușite de register, login, refresh și logout sunt persistate în
-  `audit_events`, fără parole sau tokenuri;
+- evenimentele de identitate și administrare sunt persistate în `audit_events`,
+  împreună cu IP și user-agent limitat, fără parole sau tokenuri;
 - register, login, refresh și logout sunt limitate prin contoare atomice în
   PostgreSQL; scope-urile IP, identitate și sesiune sunt pseudonimizate cu HMAC,
   iar răspunsurile limitate includ `Retry-After`;
@@ -61,6 +67,11 @@ Pentru un cont cu MFA, parola nu mai emite sesiune. Login-ul răspunde `202` cu
 actualizează sign counter-ul/backup state-ul credentialului și abia apoi creează
 cookie-ul, JWT-ul și evenimentul de audit.
 
+Un passkey poate fi eliminat numai după reconfirmarea parolei. Eliminarea
+ultimului passkey dezactivează obligatoriu MFA și invalidează toate codurile de
+backup. Endpoint-ul dedicat de dezactivare MFA șterge într-o singură tranzacție
+ceremoniile în curs, credentialele și codurile de recuperare.
+
 În producție, `JWT_SECRET` trebuie generat criptografic și injectat dintr-un
 secret manager, `COOKIE_SECURE=true`, iar traficul trebuie terminat exclusiv
 prin HTTPS. Valorile din Compose sunt numai pentru dezvoltare.
@@ -81,7 +92,7 @@ prin HTTPS. Valorile din Compose sunt numai pentru dezvoltare.
 
 ## Funcționalități rămase
 
-UI-ul browser pentru înrolare/administrare, ștergerea sigură a credentialelor și
-recuperarea asistată a contului rămân verticale separate. Testele browser vor
+UI-ul browser pentru autentificare și înrolare/administrare, verificarea emailului
+și recuperarea asistată a contului rămân verticale separate. Testele browser vor
 folosi un authenticator virtual; testele API verifică între timp origin/RP,
 persistența server-side și expirarea challenge-ului.

@@ -10,13 +10,13 @@ Browser
 └── Dedicated Web Worker (apps/pdf-worker)
     └── PDF engine (crates/pdf-engine, lopdf)
 
-NGINX
-├── static frontend and WASM artifacts
-└── /api and /metrics proxy
+Edge
+├── Caddy terminates TLS and proxies /api directly to Axum in production
+└── NGINX serves frontend/WASM; it proxies /api only in local development
     └── Axum backend (apps/backend)
         ├── current: health, telemetry, metrics and PostgreSQL pool
-        ├── current: password auth, rotating sessions, JWT, rate limits and audit
-        ├── current: passkeys and one-time backup codes
+        ├── current: password auth, device sessions, JWT, rate limits and audit
+        ├── current: passkeys, MFA lifecycle and one-time backup codes
         ├── planned: webhook and AI service adapters
         ├── planned: optional R2/S3 persistence adapter
         └── structured logs + OpenMetrics endpoint

@@ -49,6 +49,22 @@ pub struct BackupCodesRegenerateRequest {
     pub password: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateProfileRequest {
+    pub display_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PasswordConfirmationRequest {
+    pub password: String,
+}
+
 #[derive(Clone, Debug, FromRow)]
 pub struct UserRecord {
     pub id: Uuid,
@@ -141,7 +157,9 @@ pub struct PasskeyRegistrationResponse {
 pub struct PasskeySummary {
     pub id: Uuid,
     pub nickname: String,
+    #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339::option")]
     pub last_used_at: Option<OffsetDateTime>,
 }
 
@@ -149,6 +167,27 @@ pub struct PasskeySummary {
 pub struct PasskeyListResponse {
     pub passkeys: Vec<PasskeySummary>,
     pub unused_backup_codes: i64,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct SessionSummary {
+    pub id: Uuid,
+    pub current: bool,
+    pub user_agent: Option<String>,
+    pub ip_address: Option<String>,
+    #[serde(with = "time::serde::rfc3339")]
+    pub created_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    pub last_seen_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    pub expires_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    pub idle_expires_at: OffsetDateTime,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SessionListResponse {
+    pub sessions: Vec<SessionSummary>,
 }
 
 #[derive(Debug, Serialize)]
@@ -177,4 +216,28 @@ pub struct SessionBundle {
     pub response: AuthResponse,
     pub session_token: String,
     pub session_id: Uuid,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_timestamps_are_rfc3339_strings() {
+        let timestamp = OffsetDateTime::from_unix_timestamp(1_700_000_000).expect("timestamp");
+        let value = serde_json::to_value(SessionSummary {
+            id: Uuid::nil(),
+            current: true,
+            user_agent: None,
+            ip_address: Some("203.0.113.7".to_owned()),
+            created_at: timestamp,
+            last_seen_at: timestamp,
+            expires_at: timestamp,
+            idle_expires_at: timestamp,
+        })
+        .expect("serialize session");
+
+        assert_eq!(value["created_at"], "2023-11-14T22:13:20Z");
+        assert!(value["expires_at"].is_string());
+    }
 }

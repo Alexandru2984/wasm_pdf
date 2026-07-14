@@ -20,6 +20,12 @@ const MAX_LOGIN_ATTEMPTS: i32 = 5;
 const LOGIN_LOCK_MINUTES: i64 = 15;
 const SESSION_IDLE_DAYS: i64 = 7;
 
+#[derive(Clone, Copy)]
+pub(super) struct RequestContext<'a> {
+    pub ip_address: Option<&'a str>,
+    pub user_agent: Option<&'a str>,
+}
+
 #[derive(Clone)]
 pub struct AuthService {
     pub(super) database: Database,
@@ -48,7 +54,7 @@ impl AuthService {
         validation.set_issuer(&[&config.jwt_issuer]);
         validation.set_audience(&[&config.jwt_audience]);
         validation.leeway = 5;
-        let dummy_password_hash = hash_password(random_token()).await?;
+        let dummy_password_hash = hash_password(random_token()?).await?;
         let rate_limiter = RateLimiter::new(database.clone(), config.jwt_secret.as_bytes());
         let origin = Url::parse(&config.webauthn_rp_origin).map_err(AuthError::internal)?;
         let webauthn = WebauthnBuilder::new(&config.webauthn_rp_id, &origin)
@@ -93,10 +99,10 @@ impl AuthService {
     /// # Errors
     ///
     /// Returns validation/conflict errors or an internal persistence/crypto error.
-    pub async fn register(
+    pub(super) async fn register(
         &self,
         request: RegisterRequest,
-        user_agent: Option<&str>,
+        context: RequestContext<'_>,
     ) -> Result<SessionBundle, AuthError> {
         let email = validate_email(&request.email)?;
         let display_name = validate_display_name(&request.display_name)?;
@@ -124,7 +130,7 @@ impl AuthService {
         .await
         .map_err(map_registration_error)?;
         let bundle = self
-            .create_session(&mut transaction, &user, user_agent)
+            .create_session(&mut transaction, &user, context)
             .await?;
         insert_audit(
             &mut transaction,
@@ -132,7 +138,7 @@ impl AuthService {
             Some(bundle.session_id),
             "auth.register",
             "success",
-            user_agent,
+            context,
         )
         .await?;
         transaction.commit().await.map_err(AuthError::internal)?;
@@ -144,10 +150,10 @@ impl AuthService {
     /// # Errors
     ///
     /// Returns generic invalid credentials or an internal persistence/crypto error.
-    pub async fn login(
+    pub(super) async fn login(
         &self,
         request: LoginRequest,
-        user_agent: Option<&str>,
+        context: RequestContext<'_>,
     ) -> Result<LoginOutcome, AuthError> {
         let normalized = normalize_email_for_login(&request.email);
         if request.password.len() > 1_024 {
@@ -204,7 +210,7 @@ impl AuthService {
         .await
         .map_err(AuthError::internal)?;
         let bundle = self
-            .create_session(&mut transaction, &user, user_agent)
+            .create_session(&mut transaction, &user, context)
             .await?;
         insert_audit(
             &mut transaction,
@@ -212,7 +218,7 @@ impl AuthService {
             Some(bundle.session_id),
             "auth.login",
             "success",
-            user_agent,
+            context,
         )
         .await?;
         transaction.commit().await.map_err(AuthError::internal)?;
@@ -224,11 +230,11 @@ impl AuthService {
     /// # Errors
     ///
     /// Returns unauthorized/CSRF errors or an internal persistence/crypto error.
-    pub async fn refresh(
+    pub(super) async fn refresh(
         &self,
         session_token: &str,
         csrf_token: &str,
-        user_agent: Option<&str>,
+        context: RequestContext<'_>,
     ) -> Result<SessionBundle, AuthError> {
         let session_hash = token_hash(session_token);
         let csrf_hash = token_hash(csrf_token);
@@ -269,7 +275,7 @@ impl AuthService {
             return Err(AuthError::Unauthorized);
         }
         let bundle = self
-            .create_session(&mut transaction, &current.user, user_agent)
+            .create_session(&mut transaction, &current.user, context)
             .await?;
         insert_audit(
             &mut transaction,
@@ -277,7 +283,7 @@ impl AuthService {
             Some(bundle.session_id),
             "auth.refresh",
             "success",
-            user_agent,
+            context,
         )
         .await?;
         transaction.commit().await.map_err(AuthError::internal)?;
@@ -289,11 +295,11 @@ impl AuthService {
     /// # Errors
     ///
     /// Returns a CSRF error or an internal persistence error.
-    pub async fn logout(
+    pub(super) async fn logout(
         &self,
         session_token: &str,
         csrf_token: &str,
-        user_agent: Option<&str>,
+        context: RequestContext<'_>,
     ) -> Result<(), AuthError> {
         let mut transaction = self
             .database
@@ -318,7 +324,7 @@ impl AuthService {
             Some(revoked.id),
             "auth.logout",
             "success",
-            user_agent,
+            context,
         )
         .await?;
         transaction.commit().await.map_err(AuthError::internal)?;
@@ -363,24 +369,26 @@ impl AuthService {
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         user: &UserRecord,
-        user_agent: Option<&str>,
+        context: RequestContext<'_>,
     ) -> Result<SessionBundle, AuthError> {
         let session_id = Uuid::new_v4();
-        let session_token = random_token();
-        let csrf_token = random_token();
+        let session_token = random_token()?;
+        let csrf_token = random_token()?;
         let now = OffsetDateTime::now_utc();
         let expires_at = now + Duration::days(self.session_days);
         let idle_expires_at = now + Duration::days(SESSION_IDLE_DAYS.min(self.session_days));
         query(
             r"INSERT INTO sessions
-               (id, user_id, token_hash, csrf_token_hash, user_agent, expires_at, idle_expires_at)
-               VALUES ($1, $2, $3, $4, $5, $6, $7)",
+               (id, user_id, token_hash, csrf_token_hash, user_agent, ip_address,
+                expires_at, idle_expires_at)
+               VALUES ($1, $2, $3, $4, $5, $6::inet, $7, $8)",
         )
         .bind(session_id)
         .bind(user.id)
         .bind(token_hash(&session_token))
         .bind(token_hash(&csrf_token))
-        .bind(user_agent.map(|value| truncate(value, 512)))
+        .bind(context.user_agent.map(|value| truncate(value, 512)))
+        .bind(context.ip_address)
         .bind(expires_at)
         .bind(idle_expires_at)
         .execute(&mut **transaction)
@@ -467,19 +475,20 @@ pub(super) async fn insert_audit(
     session_id: Option<Uuid>,
     event_type: &str,
     outcome: &str,
-    user_agent: Option<&str>,
+    context: RequestContext<'_>,
 ) -> Result<(), AuthError> {
     query(
         r"INSERT INTO audit_events
-           (id, user_id, session_id, event_type, outcome, user_agent)
-           VALUES ($1, $2, $3, $4, $5, $6)",
+           (id, user_id, session_id, event_type, outcome, ip_address, user_agent)
+           VALUES ($1, $2, $3, $4, $5, $6::inet, $7)",
     )
     .bind(Uuid::new_v4())
     .bind(user_id)
     .bind(session_id)
     .bind(event_type)
     .bind(outcome)
-    .bind(user_agent.map(|value| truncate(value, 512)))
+    .bind(context.ip_address)
+    .bind(context.user_agent.map(|value| truncate(value, 512)))
     .execute(&mut **transaction)
     .await
     .map_err(AuthError::internal)?;
@@ -498,7 +507,7 @@ fn normalize_email_for_login(value: &str) -> String {
     value.trim().to_lowercase()
 }
 
-fn validate_display_name(value: &str) -> Result<&str, AuthError> {
+pub(super) fn validate_display_name(value: &str) -> Result<&str, AuthError> {
     let trimmed = value.trim();
     let characters = trimmed.chars().count();
     if !(2..=80).contains(&characters) || trimmed.chars().any(char::is_control) {
@@ -509,7 +518,7 @@ fn validate_display_name(value: &str) -> Result<&str, AuthError> {
     Ok(trimmed)
 }
 
-fn validate_password(value: &str) -> Result<(), AuthError> {
+pub(super) fn validate_password(value: &str) -> Result<(), AuthError> {
     let characters = value.chars().count();
     if !(12..=128).contains(&characters) || value.len() > 512 {
         return Err(AuthError::Validation(

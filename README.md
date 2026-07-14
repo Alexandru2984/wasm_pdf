@@ -128,10 +128,18 @@ Build-ul de producție al frontend-ului instalează versiunile fixate de
 | `POST` | `/api/v1/auth/refresh` | rotație sesiune; necesită cookie și `X-CSRF-Token` |
 | `POST` | `/api/v1/auth/logout` | revocare sesiune; necesită cookie și `X-CSRF-Token` |
 | `GET` | `/api/v1/auth/me` | identitatea asociată unui JWT Bearer activ |
+| `PUT` | `/api/v1/auth/profile` | actualizare nume public |
+| `PUT` | `/api/v1/auth/password` | schimbare parolă, revocare globală și sesiune nouă |
+| `DELETE` | `/api/v1/auth/account` | ștergere permanentă după reconfirmarea parolei |
+| `GET` | `/api/v1/auth/sessions` | dispozitive/sesiuni active, cu IP și expirare |
+| `DELETE` | `/api/v1/auth/sessions/{id}` | revocarea unei alte sesiuni |
+| `POST` | `/api/v1/auth/sessions/others/revoke` | revocarea tuturor celorlalte sesiuni |
 | `POST` | `/api/v1/auth/passkeys/register/start` | challenge de înrolare, cu JWT și reconfirmarea parolei |
 | `POST` | `/api/v1/auth/passkeys/register/finish` | verificare attestation și salvare passkey |
 | `POST` | `/api/v1/auth/passkeys/login/finish` | verificare assertion și emitere sesiune MFA |
 | `GET` | `/api/v1/auth/passkeys` | passkeys și numărul codurilor de backup rămase |
+| `DELETE` | `/api/v1/auth/passkeys/{id}` | eliminare passkey după reconfirmarea parolei |
+| `POST` | `/api/v1/auth/mfa/disable` | eliminarea tuturor factorilor după reconfirmarea parolei |
 | `POST` | `/api/v1/auth/mfa/backup-code` | consumă un cod one-time după etapa de parolă |
 | `POST` | `/api/v1/auth/mfa/backup-codes/regenerate` | înlocuiește codurile după reconfirmarea parolei |
 | `POST` | `/api/v1/telemetry/pdf-operations` | rezultat și durată, fără bytes PDF |
@@ -156,6 +164,9 @@ hash-urile tokenurilor de sesiune și CSRF, rotește sesiunea la refresh și
 invalidează imediat JWT-ul asociat sesiunii vechi. JWT-urile expiră implicit în
 15 minute și sunt reverificate față de sesiunea activă din PostgreSQL. Contractul
 și modelul de amenințări sunt descrise în [documentația de autentificare](docs/authentication.md).
+Schimbarea parolei incrementează versiunea globală a tokenurilor, revocă toate
+sesiunile existente și emite o singură sesiune nouă. IP-ul validat și user-agent-ul
+sunt păstrate pentru inventarul de dispozitive și evenimentele de audit.
 După înrolarea unui passkey, login-ul corect cu parolă răspunde `202` cu un
 challenge WebAuthn; cookie-ul și JWT-ul sunt emise numai după assertion valid
 sau consumarea unui cod de backup.

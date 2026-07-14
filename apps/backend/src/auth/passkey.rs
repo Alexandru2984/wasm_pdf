@@ -10,9 +10,10 @@ use super::model::{
     AccessClaims, BackupCodeLoginRequest, BackupCodesRegenerateRequest, BackupCodesResponse,
     PasskeyAuthenticationChallenge, PasskeyListResponse, PasskeyLoginFinishRequest,
     PasskeyRegistrationChallenge, PasskeyRegistrationFinishRequest, PasskeyRegistrationResponse,
-    PasskeyRegistrationStartRequest, PasskeySummary, SessionBundle, UserRecord,
+    PasskeyRegistrationStartRequest, PasskeySummary, PasswordConfirmationRequest, SessionBundle,
+    UserRecord,
 };
-use super::service::{AuthService, insert_audit};
+use super::service::{AuthService, RequestContext, insert_audit};
 
 const CEREMONY_MINUTES: i64 = 5;
 const BACKUP_CODE_COUNT: usize = 10;
@@ -76,11 +77,11 @@ impl AuthService {
     /// # Errors
     ///
     /// Returns an authentication, persistence or `WebAuthn` verification error.
-    pub async fn finish_passkey_registration(
+    pub(super) async fn finish_passkey_registration(
         &self,
         access_token: &str,
         request: PasskeyRegistrationFinishRequest,
-        user_agent: Option<&str>,
+        context: RequestContext<'_>,
     ) -> Result<PasskeyRegistrationResponse, AuthError> {
         let (claims, user) = self.authenticated_user(access_token).await?;
         let ceremony = query_as::<_, RegistrationCeremony>(
@@ -149,7 +150,7 @@ impl AuthService {
             Some(claims.sid),
             "auth.passkey_registered",
             "success",
-            user_agent,
+            context,
         )
         .await?;
         transaction.commit().await.map_err(AuthError::internal)?;
@@ -208,10 +209,10 @@ impl AuthService {
     /// # Errors
     ///
     /// Returns an MFA, persistence or `WebAuthn` verification error.
-    pub async fn finish_passkey_login(
+    pub(super) async fn finish_passkey_login(
         &self,
         request: PasskeyLoginFinishRequest,
-        user_agent: Option<&str>,
+        context: RequestContext<'_>,
     ) -> Result<SessionBundle, AuthError> {
         let ceremony = self
             .consume_authentication_ceremony(request.ceremony_id)
@@ -258,7 +259,7 @@ impl AuthService {
         .map_err(AuthError::internal)?;
         let user = load_user(&mut transaction, ceremony.user_id).await?;
         let bundle = self
-            .create_session(&mut transaction, &user, user_agent)
+            .create_session(&mut transaction, &user, context)
             .await?;
         insert_audit(
             &mut transaction,
@@ -266,7 +267,7 @@ impl AuthService {
             Some(bundle.session_id),
             "auth.passkey_login",
             "success",
-            user_agent,
+            context,
         )
         .await?;
         transaction.commit().await.map_err(AuthError::internal)?;
@@ -278,10 +279,10 @@ impl AuthService {
     /// # Errors
     ///
     /// Returns an MFA or persistence error.
-    pub async fn login_with_backup_code(
+    pub(super) async fn login_with_backup_code(
         &self,
         request: BackupCodeLoginRequest,
-        user_agent: Option<&str>,
+        context: RequestContext<'_>,
     ) -> Result<SessionBundle, AuthError> {
         let normalized = normalize_backup_code(&request.code).ok_or(AuthError::InvalidMfa)?;
         let mut transaction = self
@@ -320,7 +321,7 @@ impl AuthService {
             .map_err(AuthError::internal)?;
         let user = load_user(&mut transaction, ceremony.user_id).await?;
         let bundle = self
-            .create_session(&mut transaction, &user, user_agent)
+            .create_session(&mut transaction, &user, context)
             .await?;
         insert_audit(
             &mut transaction,
@@ -328,7 +329,7 @@ impl AuthService {
             Some(bundle.session_id),
             "auth.backup_code_login",
             "success",
-            user_agent,
+            context,
         )
         .await?;
         transaction.commit().await.map_err(AuthError::internal)?;
@@ -371,11 +372,11 @@ impl AuthService {
     /// # Errors
     ///
     /// Returns an authentication, validation or persistence error.
-    pub async fn regenerate_backup_codes(
+    pub(super) async fn regenerate_backup_codes(
         &self,
         access_token: &str,
         request: BackupCodesRegenerateRequest,
-        user_agent: Option<&str>,
+        context: RequestContext<'_>,
     ) -> Result<BackupCodesResponse, AuthError> {
         let (claims, user) = self.authenticated_user(access_token).await?;
         if !verify_password(request.password, user.password_hash.clone()).await? {
@@ -410,14 +411,129 @@ impl AuthService {
             Some(claims.sid),
             "auth.backup_codes_regenerated",
             "success",
-            user_agent,
+            context,
         )
         .await?;
         transaction.commit().await.map_err(AuthError::internal)?;
         Ok(BackupCodesResponse { backup_codes })
     }
 
-    async fn authenticated_user(
+    /// Remove one passkey after a password step-up check.
+    pub(super) async fn remove_passkey(
+        &self,
+        access_token: &str,
+        credential_id: Uuid,
+        request: PasswordConfirmationRequest,
+        context: RequestContext<'_>,
+    ) -> Result<(), AuthError> {
+        let (claims, user) = self.authenticated_user(access_token).await?;
+        if !verify_password(request.password, user.password_hash.clone()).await? {
+            return Err(AuthError::InvalidCredentials);
+        }
+        let mut transaction = self
+            .database
+            .pool()
+            .begin()
+            .await
+            .map_err(AuthError::internal)?;
+        let removed = query_scalar::<_, Uuid>(
+            "DELETE FROM webauthn_credentials WHERE id = $1 AND user_id = $2 RETURNING id",
+        )
+        .bind(credential_id)
+        .bind(user.id)
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(AuthError::internal)?;
+        if removed.is_none() {
+            return Err(AuthError::NotFound);
+        }
+        let remaining =
+            query_scalar::<_, i64>("SELECT count(*) FROM webauthn_credentials WHERE user_id = $1")
+                .bind(user.id)
+                .fetch_one(&mut *transaction)
+                .await
+                .map_err(AuthError::internal)?;
+        if remaining == 0 {
+            query("DELETE FROM backup_codes WHERE user_id = $1")
+                .bind(user.id)
+                .execute(&mut *transaction)
+                .await
+                .map_err(AuthError::internal)?;
+            query("DELETE FROM webauthn_ceremonies WHERE user_id = $1")
+                .bind(user.id)
+                .execute(&mut *transaction)
+                .await
+                .map_err(AuthError::internal)?;
+            query("UPDATE users SET mfa_required = false, updated_at = now() WHERE id = $1")
+                .bind(user.id)
+                .execute(&mut *transaction)
+                .await
+                .map_err(AuthError::internal)?;
+        }
+        insert_audit(
+            &mut transaction,
+            Some(user.id),
+            Some(claims.sid),
+            "auth.passkey_removed",
+            "success",
+            context,
+        )
+        .await?;
+        transaction.commit().await.map_err(AuthError::internal)?;
+        Ok(())
+    }
+
+    /// Disable MFA and remove every passkey and unused recovery code.
+    pub(super) async fn disable_mfa(
+        &self,
+        access_token: &str,
+        request: PasswordConfirmationRequest,
+        context: RequestContext<'_>,
+    ) -> Result<(), AuthError> {
+        let (claims, user) = self.authenticated_user(access_token).await?;
+        if !verify_password(request.password, user.password_hash.clone()).await? {
+            return Err(AuthError::InvalidCredentials);
+        }
+        let mut transaction = self
+            .database
+            .pool()
+            .begin()
+            .await
+            .map_err(AuthError::internal)?;
+        query("DELETE FROM webauthn_ceremonies WHERE user_id = $1")
+            .bind(user.id)
+            .execute(&mut *transaction)
+            .await
+            .map_err(AuthError::internal)?;
+        query("DELETE FROM webauthn_credentials WHERE user_id = $1")
+            .bind(user.id)
+            .execute(&mut *transaction)
+            .await
+            .map_err(AuthError::internal)?;
+        query("DELETE FROM backup_codes WHERE user_id = $1")
+            .bind(user.id)
+            .execute(&mut *transaction)
+            .await
+            .map_err(AuthError::internal)?;
+        query("UPDATE users SET mfa_required = false, updated_at = now() WHERE id = $1")
+            .bind(user.id)
+            .execute(&mut *transaction)
+            .await
+            .map_err(AuthError::internal)?;
+        insert_audit(
+            &mut transaction,
+            Some(user.id),
+            Some(claims.sid),
+            "auth.mfa_disabled",
+            "success",
+            context,
+        )
+        .await?;
+        transaction.commit().await.map_err(AuthError::internal)?;
+        Ok(())
+    }
+
+    pub(super) async fn authenticated_user(
         &self,
         access_token: &str,
     ) -> Result<(AccessClaims, UserRecord), AuthError> {

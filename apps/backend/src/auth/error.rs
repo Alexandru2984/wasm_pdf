@@ -11,6 +11,7 @@ pub enum AuthError {
     InvalidCsrf,
     InvalidMfa,
     EmailTaken,
+    NotFound,
     RateLimited { retry_after: u64 },
     Unavailable,
     Internal(String),
@@ -71,6 +72,11 @@ impl IntoResponse for AuthError {
                 StatusCode::CONFLICT,
                 "email_taken",
                 "An account already exists for this email.",
+            ),
+            Self::NotFound => (
+                StatusCode::NOT_FOUND,
+                "not_found",
+                "The requested resource does not exist.",
             ),
             Self::RateLimited { .. } => unreachable!("handled before the error mapping"),
             Self::Unavailable => (

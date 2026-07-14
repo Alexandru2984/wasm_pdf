@@ -6,9 +6,19 @@
 		-Server
 	}
 
-	reverse_proxy frontend:8080 {
-		health_uri /healthz
-		health_interval 15s
-		health_timeout 3s
+	handle /api/* {
+		reverse_proxy backend:8080
+	}
+
+	handle /health/* {
+		reverse_proxy backend:8080
+	}
+
+	handle {
+		reverse_proxy frontend:8080 {
+			health_uri /healthz
+			health_interval 15s
+			health_timeout 3s
+		}
 	}
 }
