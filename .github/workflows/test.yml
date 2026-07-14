@@ -107,17 +107,24 @@ jobs:
         run: >-
           docker run --rm
           --volume "$PWD/infra/loki/loki-config.yml:/etc/loki/config.yml:ro"
-          grafana/loki:3.5.1
+          grafana/loki@sha256:70b9f699fc9bb868b62f1cfd4f787dfa50242f1fd92e6089787d5d7daea75fe8
           -config.file=/etc/loki/config.yml
           -verify-config=true
 
-      - name: Validate Promtail configuration
+      - name: Validate Prometheus configuration
         run: >-
           docker run --rm
-          --volume "$PWD/infra/promtail/promtail-config.yml:/etc/promtail/config.yml:ro"
-          grafana/promtail:3.5.1
-          -config.file=/etc/promtail/config.yml
-          -check-syntax
+          --entrypoint /bin/promtool
+          --volume "$PWD/infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+          prom/prometheus@sha256:c6b27ea434f8389bfe233fbc7be381cf50587c286e871bc842008f5a1b1908a7
+          check config /etc/prometheus/prometheus.yml
+
+      - name: Validate Alloy configuration
+        run: >-
+          docker run --rm
+          --volume "$PWD/infra/alloy/config.alloy:/etc/alloy/config.alloy:ro"
+          grafana/alloy:v1.17.1@sha256:4f6ddc56ffdcf8a6316748fc5162972e20cb301523cac1bb4a31957df733ae9b
+          validate /etc/alloy/config.alloy
 
   container-images:
     name: Build ${{ matrix.image }} image
@@ -136,3 +143,13 @@ jobs:
           --file docker/${{ matrix.image }}/Dockerfile
           --tag wasm-pdf-${{ matrix.image }}:ci
           .
+
+      - name: Scan image for high and critical vulnerabilities
+        run: >-
+          docker run --rm
+          --volume /var/run/docker.sock:/var/run/docker.sock
+          --volume "$RUNNER_TEMP/trivy-cache:/root/.cache"
+          aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
+          image --skip-version-check --scanners vuln
+          --severity HIGH,CRITICAL --exit-code 1
+          wasm-pdf-${{ matrix.image }}:ci

@@ -2,7 +2,7 @@ name: wasm-pdf-editor
 
 services:
   postgres:
-    image: postgres:18.3-alpine
+    image: postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-pdf_editor}
       POSTGRES_USER: ${POSTGRES_USER:-pdf_editor}
@@ -76,7 +76,7 @@ services:
       - /tmp:size=32m,mode=1777
 
   prometheus:
-    image: prom/prometheus:v3.5.0
+    image: prom/prometheus:v3.13.0@sha256:c6b27ea434f8389bfe233fbc7be381cf50587c286e871bc842008f5a1b1908a7
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -90,9 +90,14 @@ services:
       - observability
     security_opt:
       - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
 
   loki:
-    image: grafana/loki:3.5.1
+    image: grafana/loki:3.7.3@sha256:70b9f699fc9bb868b62f1cfd4f787dfa50242f1fd92e6089787d5d7daea75fe8
     command: -config.file=/etc/loki/loki-config.yml
     volumes:
       - ./infra/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
@@ -102,25 +107,62 @@ services:
       - observability
     security_opt:
       - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
 
-  promtail:
-    image: grafana/promtail:3.5.1
-    command: -config.file=/etc/promtail/promtail-config.yml
-    depends_on:
-      - loki
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:v0.4.2@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476
+    environment:
+      CONTAINERS: "1"
+      NETWORKS: "1"
+      PING: "1"
+      VERSION: "1"
+      POST: "0"
     volumes:
-      - ./infra/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - promtail-data:/var/lib/promtail
     restart: unless-stopped
     networks:
       - observability
     security_opt:
       - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+      - /run:size=8m,mode=0755
+    cap_drop:
+      - ALL
+
+  alloy:
+    image: grafana/alloy:v1.17.1@sha256:4f6ddc56ffdcf8a6316748fc5162972e20cb301523cac1bb4a31957df733ae9b
+    command:
+      - run
+      - --disable-reporting
+      - --server.http.enable-pprof=false
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    user: "473:473"
+    depends_on:
+      - loki
+      - docker-proxy
+    volumes:
+      - ./infra/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy-data:/var/lib/alloy/data
+    restart: unless-stopped
+    networks:
+      - observability
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop:
+      - ALL
 
   grafana:
-    image: grafana/grafana:12.1.0
+    image: grafana/grafana:13.1.0@sha256:121a7a9ece6dc10b969f1f96eed64b4f07dfac0d0b8abc070f7cb83bbde86f63
     depends_on:
       - prometheus
       - loki
@@ -151,6 +193,11 @@ services:
       - observability
     security_opt:
       - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop:
+      - ALL
 
 networks:
   app:
@@ -162,5 +209,5 @@ volumes:
   grafana-data:
   loki-data:
   prometheus-data:
-  promtail-data:
+  alloy-data:
   postgres-data:

@@ -23,7 +23,7 @@ NGINX
 
 Observability
 ├── Prometheus scrapes backend metrics
-├── Promtail reads container JSON logs and pushes them to Loki
+├── Alloy reads container JSON logs through a read-only Docker API proxy
 └── Grafana queries Prometheus and Loki
 ```
 

@@ -25,7 +25,7 @@ motorul PDF și observabilitate.
 - rate limiting distribuit pentru autentificare, cu bucket-uri PostgreSQL,
   scope-uri HMAC și răspuns standard `429 Retry-After`;
 - telemetrie pentru succes, eroare și durata procesării client-side;
-- NGINX, Prometheus, Loki, Promtail și dashboard Grafana preconfigurat;
+- NGINX, Prometheus LTS, Loki, Grafana Alloy și dashboard Grafana preconfigurat;
 - imagini multi-stage, procese non-root și containere read-only unde este
   posibil;
 - CI pentru format, Clippy, teste native, ținte WASM, configurații și imagini;
@@ -44,7 +44,7 @@ Yew UI ── transferable buffers ──► Web Worker
     ▼                                  │
 NGINX ──► Axum                         └──► Blob URL / download local
             ├── PostgreSQL
-            ├── JSON logs ──► Promtail ──► Loki
+            ├── JSON logs ──► Alloy ──► Loki
             └── /metrics ────────────────► Prometheus
                                                 │
                                                 ▼
@@ -199,8 +199,10 @@ Răspunsurile includ `status`, `request_id`, `operation`, `duration_ms` și fie
 ## Observabilitate
 
 Backend-ul scrie JSON structurat în stdout, inclusiv `request_id`, rută, status
-și latență. NGINX folosește tot loguri JSON. Promtail descoperă numai
+și latență. NGINX folosește tot loguri JSON. Grafana Alloy descoperă numai
 containerele proiectului Compose `wasm-pdf-editor` și le trimite către Loki.
+Accesul la Docker trece printr-un proxy care permite numai citirea containerelor,
+rețelelor și logurilor; Alloy nu montează socket-ul daemonului.
 
 Prometheus colectează:
 
@@ -217,9 +219,10 @@ loguri corelate.
 
 Workflow-ul `Test` rulează la push și pull request. Toate acțiunile GitHub sunt
 fixate la commit SHA. Pipeline-ul blochează advisories Rust cunoscute, licențe
-sau surse nepermise și secrete ajunse în istoricul Git; validează și ambele
-configurații Compose, inclusiv overlay-ul de producție. După un test reușit pe
-`main`, workflow-ul `Deploy` publică imaginile:
+sau surse nepermise, secrete ajunse în istoricul Git și vulnerabilități de
+severitate high/critical din imaginile finale; validează și ambele configurații
+Compose, inclusiv overlay-ul de producție. După un test reușit pe `main`,
+workflow-ul `Deploy` publică imaginile:
 
 ```text
 ghcr.io/<owner>/<repository>-backend:sha-<commit>
@@ -253,7 +256,8 @@ secret, publicarea imaginilor rămâne rezultatul final al pipeline-ului.
 │   ├── loki/loki-config.yml
 │   ├── nginx/nginx.conf
 │   ├── prometheus/prometheus.yml
-│   └── promtail/promtail-config.yml
+│   ├── alloy/config.alloy
+│   └── caddy/Caddyfile
 ├── .github/workflows
 │   ├── deploy.yml
 │   └── test.yml

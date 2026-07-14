@@ -51,7 +51,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.0",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "editorMode": "code",
@@ -98,7 +98,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.0",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "editorMode": "code",
@@ -143,7 +143,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.0",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "editorMode": "code",
@@ -185,7 +185,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.0",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "editorMode": "code",
@@ -237,7 +237,7 @@
         "legend": { "calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
       },
-      "pluginVersion": "12.1.0",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "editorMode": "code",
@@ -296,7 +296,7 @@
         "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
       },
-      "pluginVersion": "12.1.0",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "editorMode": "code",
@@ -324,7 +324,7 @@
         "sortOrder": "Descending",
         "wrapLogMessage": true
       },
-      "pluginVersion": "12.1.0",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "loki" },
@@ -350,4 +350,3 @@
   "version": 1,
   "weekStart": ""
 }
-

@@ -17,7 +17,7 @@ datasources:
     jsonData:
       httpMethod: POST
       prometheusType: Prometheus
-      prometheusVersion: 3.5.0
+      prometheusVersion: 3.13.0
 
   - name: Loki
     uid: loki
@@ -31,4 +31,3 @@ datasources:
         - name: request_id
           matcherRegex: '"request_id":"([^"]+)"'
           url: ""
-

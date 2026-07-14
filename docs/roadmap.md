@@ -11,7 +11,7 @@ trebuie să aibă teste, observabilitate și modelul de securitate corespunzăto
   motorul `pdf-engine`;
 - Web Worker WASM și UI Yew;
 - backend Axum pentru health și telemetrie;
-- Prometheus, Loki, Promtail și Grafana;
+- Prometheus LTS, Loki, Grafana Alloy și Grafana;
 - containere de producție și pipeline-uri CI/CD.
 
 ## M1 · Paritate motor PDF

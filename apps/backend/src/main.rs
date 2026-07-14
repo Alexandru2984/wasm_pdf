@@ -1,14 +1,22 @@
 use anyhow::Context;
 use backend::{AppState, AuthService, Config, Database, build_router, init_tracing};
+use std::{
+    io::{Read, Write},
+    net::{Ipv4Addr, SocketAddrV4, TcpStream},
+    time::Duration,
+};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let command = std::env::args().nth(1);
+    if command.as_deref() == Some("healthcheck") {
+        return healthcheck();
+    }
     if command
         .as_deref()
         .is_some_and(|command| command != "migrate")
     {
-        anyhow::bail!("supported commands: migrate");
+        anyhow::bail!("supported commands: healthcheck, migrate");
     }
     let config = Config::from_env()?;
     init_tracing(&config.log_filter)?;
@@ -37,6 +45,29 @@ async fn main() -> anyhow::Result<()> {
         .context("backend server failed")?;
     tracing::info!("backend_stopped");
 
+    Ok(())
+}
+
+fn healthcheck() -> anyhow::Result<()> {
+    let port = std::env::var("APP_PORT")
+        .unwrap_or_else(|_| "8080".to_owned())
+        .parse()
+        .context("APP_PORT must be a valid TCP port")?;
+    let address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
+    let timeout = Duration::from_secs(2);
+    let mut stream = TcpStream::connect_timeout(&address.into(), timeout)
+        .with_context(|| format!("backend health endpoint is unreachable at {address}"))?;
+    stream.set_read_timeout(Some(timeout))?;
+    stream.set_write_timeout(Some(timeout))?;
+    stream
+        .write_all(b"GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")?;
+
+    let mut response = [0_u8; 64];
+    let bytes_read = stream.read(&mut response)?;
+    let status_line = std::str::from_utf8(&response[..bytes_read]).unwrap_or_default();
+    if !status_line.starts_with("HTTP/1.1 200") {
+        anyhow::bail!("backend readiness check returned a non-success response");
+    }
     Ok(())
 }
 

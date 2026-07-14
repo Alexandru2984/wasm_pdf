@@ -1,7 +1,7 @@
 use anyhow::Context;
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
-/// Install newline-delimited JSON logging for collection by Promtail/Loki.
+/// Install newline-delimited JSON logging for collection by Alloy/Loki.
 ///
 /// # Errors
 ///
