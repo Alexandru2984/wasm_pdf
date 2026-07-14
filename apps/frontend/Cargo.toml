@@ -1,0 +1,14 @@
+[package]
+name = "frontend"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Yew browser UI for local-first PDF processing"
+
+[dependencies]
+yew.workspace = true
+
+[lints]
+workspace = true
+

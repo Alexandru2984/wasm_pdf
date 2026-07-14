@@ -1,0 +1,23 @@
+[package]
+name = "pdf-worker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Web Worker WASM boundary for client-side PDF processing"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+console_error_panic_hook.workspace = true
+js-sys.workspace = true
+pdf-engine.workspace = true
+serde.workspace = true
+serde-wasm-bindgen = "0.6.5"
+wasm-bindgen.workspace = true
+web-sys = { workspace = true, features = ["DedicatedWorkerGlobalScope", "MessageEvent"] }
+
+[lints]
+workspace = true
+
