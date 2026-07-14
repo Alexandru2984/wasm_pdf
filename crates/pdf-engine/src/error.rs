@@ -42,6 +42,9 @@ pub enum Error {
     #[error("page order is invalid: {reason}")]
     InvalidPageOrder { reason: String },
 
+    #[error("crop rectangle is invalid: {reason}")]
+    InvalidRectangle { reason: String },
+
     #[error("could not write the output PDF: {0}")]
     WriteFailed(String),
 }
@@ -61,6 +64,7 @@ impl Error {
             Self::InvalidRotation { .. } => "invalid_rotation",
             Self::InvalidPage { .. } => "invalid_page",
             Self::InvalidPageOrder { .. } => "invalid_page_order",
+            Self::InvalidRectangle { .. } => "invalid_rectangle",
             Self::WriteFailed(_) => "write_failed",
         }
     }

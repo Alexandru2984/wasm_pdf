@@ -1,4 +1,4 @@
-use pdf_engine::PageRange;
+use pdf_engine::{PageRange, PdfRect};
 use serde::{Deserialize, Serialize};
 
 pub const PROTOCOL_VERSION: u16 = 1;
@@ -30,6 +30,13 @@ pub enum WorkerRequest {
         document: serde_bytes::ByteBuf,
         order: Vec<u32>,
     },
+    Crop {
+        protocol_version: u16,
+        request_id: String,
+        document: serde_bytes::ByteBuf,
+        ranges: Vec<PageRange>,
+        rectangle: PdfRect,
+    },
 }
 
 impl WorkerRequest {
@@ -46,6 +53,9 @@ impl WorkerRequest {
             }
             | Self::Reorder {
                 protocol_version, ..
+            }
+            | Self::Crop {
+                protocol_version, ..
             } => *protocol_version,
         }
     }
@@ -55,7 +65,8 @@ impl WorkerRequest {
             Self::Merge { request_id, .. }
             | Self::Split { request_id, .. }
             | Self::Rotate { request_id, .. }
-            | Self::Reorder { request_id, .. } => request_id,
+            | Self::Reorder { request_id, .. }
+            | Self::Crop { request_id, .. } => request_id,
         }
     }
 
@@ -65,6 +76,7 @@ impl WorkerRequest {
             Self::Split { .. } => Operation::Split,
             Self::Rotate { .. } => Operation::Rotate,
             Self::Reorder { .. } => Operation::Reorder,
+            Self::Crop { .. } => Operation::Crop,
         }
     }
 }
@@ -76,6 +88,7 @@ pub enum Operation {
     Split,
     Rotate,
     Reorder,
+    Crop,
     Unknown,
 }
 

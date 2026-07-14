@@ -4,7 +4,7 @@ use gloo::net::http::Request;
 use serde::Serialize;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{Event, HtmlInputElement, HtmlSelectElement, InputEvent, Url};
-use worker::{Operation, OperationOptions, PageRange, WorkerResponse};
+use worker::{Operation, OperationOptions, PageRange, PdfRect, WorkerResponse};
 use yew::prelude::*;
 
 #[derive(Clone, PartialEq)]
@@ -20,6 +20,7 @@ fn app() -> Html {
     let range_text = use_state(|| "1-1".to_owned());
     let angle_degrees = use_state(|| 90_i16);
     let order_text = use_state(String::new);
+    let crop_text = use_state(|| "0, 0, 595, 842".to_owned());
     let busy = use_state(|| false);
     let error = use_state(|| None::<String>);
     let downloads = use_state(Vec::<DownloadFile>::new);
@@ -35,6 +36,7 @@ fn app() -> Html {
                 "split" => Operation::Split,
                 "rotate" => Operation::Rotate,
                 "reorder" => Operation::Reorder,
+                "crop" => Operation::Crop,
                 _ => Operation::Merge,
             };
             operation.set(next);
@@ -90,6 +92,7 @@ fn app() -> Html {
         let range_text = range_text.clone();
         let angle_degrees = angle_degrees.clone();
         let order_text = order_text.clone();
+        let crop_text = crop_text.clone();
         let busy = busy.clone();
         let error = error.clone();
         let downloads = downloads.clone();
@@ -108,7 +111,8 @@ fn app() -> Html {
                 return;
             }
             let ranges = if current_operation == Operation::Split
-                || (current_operation == Operation::Rotate && !range_text.trim().is_empty())
+                || (matches!(current_operation, Operation::Rotate | Operation::Crop)
+                    && !range_text.trim().is_empty())
             {
                 match parse_ranges(&range_text) {
                     Ok(ranges) => ranges,
@@ -132,6 +136,17 @@ fn app() -> Html {
             } else {
                 Vec::new()
             };
+            let rectangle = if current_operation == Operation::Crop {
+                match parse_rectangle(&crop_text) {
+                    Ok(rectangle) => Some(rectangle),
+                    Err(message) => {
+                        error.set(Some(message));
+                        return;
+                    }
+                }
+            } else {
+                None
+            };
 
             busy.set(true);
             error.set(None);
@@ -149,6 +164,7 @@ fn app() -> Html {
                         ranges,
                         angle_degrees: current_angle,
                         order,
+                        rectangle,
                     },
                 )
                 .await
@@ -209,6 +225,7 @@ fn app() -> Html {
     let is_split = *operation == Operation::Split;
     let is_rotate = *operation == Operation::Rotate;
     let is_reorder = *operation == Operation::Reorder;
+    let is_crop = *operation == Operation::Crop;
     let file_summary = if files.is_empty() {
         "Niciun fișier selectat".to_owned()
     } else {
@@ -240,6 +257,7 @@ fn app() -> Html {
                     <option value="split" selected={is_split}>{"Split — extrage intervale"}</option>
                     <option value="rotate" selected={is_rotate}>{"Rotate — rotește pagini"}</option>
                     <option value="reorder" selected={is_reorder}>{"Reorder — reordonează pagini"}</option>
+                    <option value="crop" selected={is_crop}>{"Crop — decupează pagini"}</option>
                 </select>
 
                 <div class="upload-zone">
@@ -260,21 +278,21 @@ fn app() -> Html {
                     <p class="file-summary">{file_summary}</p>
                 </div>
 
-                if is_split || is_rotate {
+                if is_split || is_rotate || is_crop {
                     <div class="range-field">
                         <label class="field-label" for="ranges">
-                            {if is_rotate { "Pagini de rotit" } else { "Intervale de pagini" }}
+                            {if is_rotate { "Pagini de rotit" } else if is_crop { "Pagini de decupat" } else { "Intervale de pagini" }}
                         </label>
                         <input
                             id="ranges"
                             type="text"
                             value={(*range_text).clone()}
                             oninput={on_range_change}
-                            placeholder={if is_rotate { "Gol = toate paginile; ex. 1-3, 5" } else { "1-3, 5, 8-10" }}
+                            placeholder={if is_rotate || is_crop { "Gol = toate paginile; ex. 1-3, 5" } else { "1-3, 5, 8-10" }}
                             disabled={*busy}
                         />
                         <small>
-                            {if is_rotate { "Lasă gol pentru toate paginile. Intervalele sunt inclusive." } else { "Intervalele sunt inclusive și numerotate de la 1." }}
+                            {if is_rotate || is_crop { "Lasă gol pentru toate paginile. Intervalele sunt inclusive." } else { "Intervalele sunt inclusive și numerotate de la 1." }}
                         </small>
                     </div>
                 }
@@ -311,6 +329,27 @@ fn app() -> Html {
                     </div>
                 }
 
+                if is_crop {
+                    <div class="range-field">
+                        <label class="field-label" for="crop-box">{"CropBox în puncte PDF"}</label>
+                        <input
+                            id="crop-box"
+                            type="text"
+                            value={(*crop_text).clone()}
+                            oninput={{
+                                let crop_text = crop_text.clone();
+                                Callback::from(move |event: InputEvent| {
+                                    let input = event.target_unchecked_into::<HtmlInputElement>();
+                                    crop_text.set(input.value());
+                                })
+                            }}
+                            placeholder="left, bottom, right, top"
+                            disabled={*busy}
+                        />
+                        <small>{"Coordonate PDF: colț stânga-jos și colț dreapta-sus. Dreptunghiul trebuie să încapă în fiecare pagină."}</small>
+                    </div>
+                }
+
                 <button class="process-button" onclick={on_process} disabled={*busy || files.is_empty()}>
                     if *busy {
                         <span class="spinner" aria-hidden="true"></span>
@@ -321,6 +360,8 @@ fn app() -> Html {
                         {"Rotește paginile"}
                     } else if is_reorder {
                         {"Reordonează documentul"}
+                    } else if is_crop {
+                        {"Decupează paginile"}
                     } else {
                         {"Unește documentele"}
                     }
@@ -425,6 +466,32 @@ fn parse_order(value: &str) -> Result<Vec<u32>, String> {
         return Err("Paginile sunt numerotate începând de la 1.".to_owned());
     }
     Ok(pages)
+}
+
+fn parse_rectangle(value: &str) -> Result<PdfRect, String> {
+    let coordinates = value
+        .split(',')
+        .map(str::trim)
+        .map(|item| {
+            item.parse::<f32>()
+                .map_err(|_| format!("Coordonata „{item}” nu este validă."))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let [left, bottom, right, top] = coordinates.as_slice() else {
+        return Err("Introdu exact patru coordonate: left, bottom, right, top.".to_owned());
+    };
+    if !coordinates.iter().all(|coordinate| coordinate.is_finite()) {
+        return Err("Coordonatele trebuie să fie numere finite.".to_owned());
+    }
+    if left >= right || bottom >= top {
+        return Err("CropBox trebuie să aibă lățime și înălțime pozitive.".to_owned());
+    }
+    Ok(PdfRect {
+        left: *left,
+        bottom: *bottom,
+        right: *right,
+        top: *top,
+    })
 }
 
 fn revoke_downloads(downloads: &UseStateHandle<Vec<DownloadFile>>) {

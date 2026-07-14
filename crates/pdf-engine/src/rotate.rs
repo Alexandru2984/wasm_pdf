@@ -1,7 +1,6 @@
-use std::collections::BTreeSet;
-
 use lopdf::{Document, Object, ObjectId};
 
+use crate::page_tree::selected_pages;
 use crate::{Error, PageRange, Result, load_document, save_document, validate_input_size};
 
 /// Rotate selected pages clockwise while preserving their content and page size.
@@ -46,25 +45,6 @@ pub fn rotate(document: &[u8], ranges: &[PageRange], angle_degrees: i16) -> Resu
     }
 
     save_document(&mut output)
-}
-
-fn selected_pages(ranges: &[PageRange], page_count: u32) -> Result<BTreeSet<u32>> {
-    if ranges.is_empty() {
-        return Ok((1..=page_count).collect());
-    }
-
-    let mut selected = BTreeSet::new();
-    for range in ranges {
-        if range.start == 0 || range.start > range.end || range.end > page_count {
-            return Err(Error::InvalidPageRange {
-                start: range.start,
-                end: range.end,
-                page_count,
-            });
-        }
-        selected.extend(range.start..=range.end);
-    }
-    Ok(selected)
 }
 
 fn inherited_rotation(document: &Document, page_id: ObjectId, page_number: u32) -> Result<i64> {

@@ -29,3 +29,7 @@ Rotate requests use `operation: "rotate"`, one `document`, optional inclusive
 Reorder requests use `operation: "reorder"`, one `document`, and an `order`
 array containing a complete one-based page permutation. Missing, duplicate, or
 out-of-bounds page numbers are rejected instead of dropping content silently.
+
+Crop requests use `operation: "crop"`, one `document`, optional inclusive
+`ranges`, and `rectangle: { left, bottom, right, top }` in PDF points. Empty
+ranges select all pages; the rectangle must fit every selected page's MediaBox.

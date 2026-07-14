@@ -4,6 +4,7 @@
 //! document transformations here makes them testable on a native target while
 //! the exact same code is compiled into the browser worker.
 
+mod crop;
 mod error;
 mod merge;
 mod page_tree;
@@ -11,6 +12,7 @@ mod reorder;
 mod rotate;
 mod split;
 
+pub use crop::{PdfRect, crop};
 pub use error::{Error, Result};
 pub use merge::merge;
 pub use reorder::reorder;

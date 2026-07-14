@@ -1,4 +1,8 @@
+use std::collections::BTreeSet;
+
 use lopdf::{Dictionary, Document, Object};
+
+use crate::{Error, PageRange, Result};
 
 const INHERITABLE_PAGE_KEYS: [&[u8]; 4] = [b"Resources", b"MediaBox", b"CropBox", b"Rotate"];
 
@@ -31,4 +35,23 @@ fn find_inherited_attribute(document: &Document, page: &Dictionary, key: &[u8]) 
     }
 
     None
+}
+
+pub(crate) fn selected_pages(ranges: &[PageRange], page_count: u32) -> Result<BTreeSet<u32>> {
+    if ranges.is_empty() {
+        return Ok((1..=page_count).collect());
+    }
+
+    let mut selected = BTreeSet::new();
+    for range in ranges {
+        if range.start == 0 || range.start > range.end || range.end > page_count {
+            return Err(Error::InvalidPageRange {
+                start: range.start,
+                end: range.end,
+                page_count,
+            });
+        }
+        selected.extend(range.start..=range.end);
+    }
+    Ok(selected)
 }

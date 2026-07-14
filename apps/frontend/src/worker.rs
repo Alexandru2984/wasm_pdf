@@ -14,6 +14,7 @@ pub enum Operation {
     Split,
     Rotate,
     Reorder,
+    Crop,
     Unknown,
 }
 
@@ -24,6 +25,7 @@ impl Operation {
             Self::Split => "split",
             Self::Rotate => "rotate",
             Self::Reorder => "reorder",
+            Self::Crop => "crop",
             Self::Unknown => "unknown",
         }
     }
@@ -33,6 +35,14 @@ impl Operation {
 pub struct PageRange {
     pub start: u32,
     pub end: u32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct PdfRect {
+    pub left: f32,
+    pub bottom: f32,
+    pub right: f32,
+    pub top: f32,
 }
 
 pub enum WorkerRequest {
@@ -56,12 +66,19 @@ pub enum WorkerRequest {
         document: Vec<u8>,
         order: Vec<u32>,
     },
+    Crop {
+        request_id: String,
+        document: Vec<u8>,
+        ranges: Vec<PageRange>,
+        rectangle: PdfRect,
+    },
 }
 
 pub struct OperationOptions {
     pub ranges: Vec<PageRange>,
     pub angle_degrees: i16,
     pub order: Vec<u32>,
+    pub rectangle: Option<PdfRect>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -119,6 +136,14 @@ pub async fn read_request(
             request_id,
             document: documents.into_iter().next().ok_or("Fișierul lipsește.")?,
             order: options.order,
+        }),
+        Operation::Crop => Ok(WorkerRequest::Crop {
+            request_id,
+            document: documents.into_iter().next().ok_or("Fișierul lipsește.")?,
+            ranges: options.ranges,
+            rectangle: options
+                .rectangle
+                .ok_or("Dreptunghiul de decupare lipsește.")?,
         }),
         Operation::Unknown => Err("Operația nu este suportată.".to_owned()),
     }
@@ -237,6 +262,32 @@ impl WorkerRequest {
                 set(&message, "document", &bytes.into())?;
                 let values = order.into_iter().map(JsValue::from).collect::<Array>();
                 set(&message, "order", &values.into())?;
+            }
+            Self::Crop {
+                request_id,
+                document,
+                ranges,
+                rectangle,
+            } => {
+                set(&message, "request_id", &JsValue::from_str(&request_id))?;
+                set(&message, "operation", &JsValue::from_str("crop"))?;
+                let bytes = Uint8Array::from(document.as_slice());
+                transfer.push(&bytes.buffer());
+                set(&message, "document", &bytes.into())?;
+                let values = Array::new();
+                for range in ranges {
+                    let value = Object::new();
+                    set(&value, "start", &range.start.into())?;
+                    set(&value, "end", &range.end.into())?;
+                    values.push(&value);
+                }
+                set(&message, "ranges", &values.into())?;
+                let value = Object::new();
+                set(&value, "left", &rectangle.left.into())?;
+                set(&value, "bottom", &rectangle.bottom.into())?;
+                set(&value, "right", &rectangle.right.into())?;
+                set(&value, "top", &rectangle.top.into())?;
+                set(&message, "rectangle", &value.into())?;
             }
         }
 

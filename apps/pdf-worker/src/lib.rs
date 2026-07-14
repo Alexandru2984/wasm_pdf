@@ -2,7 +2,7 @@
 
 mod protocol;
 
-use pdf_engine::{Error as EngineError, merge, reorder, rotate, split};
+use pdf_engine::{Error as EngineError, crop, merge, reorder, rotate, split};
 use protocol::{Operation, PROTOCOL_VERSION, WorkerRequest, WorkerResponse};
 use wasm_bindgen::prelude::*;
 
@@ -73,6 +73,12 @@ fn process(request: WorkerRequest, started_at: f64) -> WorkerResponse {
         WorkerRequest::Reorder {
             document, order, ..
         } => reorder(&document, &order).map(|bytes| vec![bytes]),
+        WorkerRequest::Crop {
+            document,
+            ranges,
+            rectangle,
+            ..
+        } => crop(&document, &ranges, rectangle).map(|bytes| vec![bytes]),
     };
 
     match result {
