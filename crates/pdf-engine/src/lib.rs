@@ -6,11 +6,14 @@
 
 mod error;
 mod merge;
+mod page_tree;
+mod reorder;
 mod rotate;
 mod split;
 
 pub use error::{Error, Result};
 pub use merge::merge;
+pub use reorder::reorder;
 pub use rotate::rotate;
 pub use split::{PageRange, split};
 

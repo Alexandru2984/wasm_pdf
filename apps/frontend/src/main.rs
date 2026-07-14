@@ -4,7 +4,7 @@ use gloo::net::http::Request;
 use serde::Serialize;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{Event, HtmlInputElement, HtmlSelectElement, InputEvent, Url};
-use worker::{Operation, PageRange, WorkerResponse};
+use worker::{Operation, OperationOptions, PageRange, WorkerResponse};
 use yew::prelude::*;
 
 #[derive(Clone, PartialEq)]
@@ -19,6 +19,7 @@ fn app() -> Html {
     let files = use_state(Vec::new);
     let range_text = use_state(|| "1-1".to_owned());
     let angle_degrees = use_state(|| 90_i16);
+    let order_text = use_state(String::new);
     let busy = use_state(|| false);
     let error = use_state(|| None::<String>);
     let downloads = use_state(Vec::<DownloadFile>::new);
@@ -33,6 +34,7 @@ fn app() -> Html {
             let next = match input.value().as_str() {
                 "split" => Operation::Split,
                 "rotate" => Operation::Rotate,
+                "reorder" => Operation::Reorder,
                 _ => Operation::Merge,
             };
             operation.set(next);
@@ -87,6 +89,7 @@ fn app() -> Html {
         let files = files.clone();
         let range_text = range_text.clone();
         let angle_degrees = angle_degrees.clone();
+        let order_text = order_text.clone();
         let busy = busy.clone();
         let error = error.clone();
         let downloads = downloads.clone();
@@ -118,6 +121,17 @@ fn app() -> Html {
                 Vec::new()
             };
             let current_angle = *angle_degrees;
+            let order = if current_operation == Operation::Reorder {
+                match parse_order(&order_text) {
+                    Ok(order) => order,
+                    Err(message) => {
+                        error.set(Some(message));
+                        return;
+                    }
+                }
+            } else {
+                Vec::new()
+            };
 
             busy.set(true);
             error.set(None);
@@ -131,8 +145,11 @@ fn app() -> Html {
                 let request = match worker::read_request(
                     current_operation,
                     selected_files,
-                    ranges,
-                    current_angle,
+                    OperationOptions {
+                        ranges,
+                        angle_degrees: current_angle,
+                        order,
+                    },
                 )
                 .await
                 {
@@ -191,6 +208,7 @@ fn app() -> Html {
 
     let is_split = *operation == Operation::Split;
     let is_rotate = *operation == Operation::Rotate;
+    let is_reorder = *operation == Operation::Reorder;
     let file_summary = if files.is_empty() {
         "Niciun fișier selectat".to_owned()
     } else {
@@ -203,7 +221,7 @@ fn app() -> Html {
                 <p class="eyebrow">{"RUST · WASM · LOCAL-FIRST"}</p>
                 <h1>{"PDF Editor"}</h1>
                 <p class="lede">
-                    {"Unește și separă documente fără upload. Bytes rămân în browser, iar procesarea rulează într-un Web Worker dedicat."}
+                    {"Transformă documente fără upload. Bytes rămân în browser, iar procesarea rulează într-un Web Worker dedicat."}
                 </p>
             </header>
 
@@ -221,6 +239,7 @@ fn app() -> Html {
                     <option value="merge" selected={*operation == Operation::Merge}>{"Merge — combină PDF-uri"}</option>
                     <option value="split" selected={is_split}>{"Split — extrage intervale"}</option>
                     <option value="rotate" selected={is_rotate}>{"Rotate — rotește pagini"}</option>
+                    <option value="reorder" selected={is_reorder}>{"Reorder — reordonează pagini"}</option>
                 </select>
 
                 <div class="upload-zone">
@@ -271,6 +290,27 @@ fn app() -> Html {
                     </div>
                 }
 
+                if is_reorder {
+                    <div class="range-field">
+                        <label class="field-label" for="page-order">{"Noua ordine a paginilor"}</label>
+                        <input
+                            id="page-order"
+                            type="text"
+                            value={(*order_text).clone()}
+                            oninput={{
+                                let order_text = order_text.clone();
+                                Callback::from(move |event: InputEvent| {
+                                    let input = event.target_unchecked_into::<HtmlInputElement>();
+                                    order_text.set(input.value());
+                                })
+                            }}
+                            placeholder="Exemplu pentru 4 pagini: 4, 2, 1, 3"
+                            disabled={*busy}
+                        />
+                        <small>{"Include fiecare pagină exact o dată."}</small>
+                    </div>
+                }
+
                 <button class="process-button" onclick={on_process} disabled={*busy || files.is_empty()}>
                     if *busy {
                         <span class="spinner" aria-hidden="true"></span>
@@ -279,6 +319,8 @@ fn app() -> Html {
                         {"Separă documentul"}
                     } else if is_rotate {
                         {"Rotește paginile"}
+                    } else if is_reorder {
+                        {"Reordonează documentul"}
                     } else {
                         {"Unește documentele"}
                     }
@@ -363,6 +405,26 @@ fn parse_ranges(value: &str) -> Result<Vec<PageRange>, String> {
         return Err("Introdu cel puțin un interval de pagini.".to_owned());
     }
     Ok(ranges)
+}
+
+fn parse_order(value: &str) -> Result<Vec<u32>, String> {
+    let pages = value
+        .split(',')
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(|item| {
+            item.parse::<u32>()
+                .map_err(|_| format!("Pagina „{item}” nu este validă."))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    if pages.is_empty() {
+        return Err("Introdu ordinea completă a paginilor.".to_owned());
+    }
+    if pages.contains(&0) {
+        return Err("Paginile sunt numerotate începând de la 1.".to_owned());
+    }
+    Ok(pages)
 }
 
 fn revoke_downloads(downloads: &UseStateHandle<Vec<DownloadFile>>) {

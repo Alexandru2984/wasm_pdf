@@ -2,8 +2,8 @@
 
 Editor PDF local-first construit ca workspace Rust. Documentele sunt procesate
 în browser, într-un Web Worker WebAssembly, iar backend-ul primește numai
-telemetrie operațională. Verticalele livrate implementează Merge, Split și
-Rotate, de la interfață până la motorul PDF și observabilitate.
+telemetrie operațională. Verticalele livrate implementează Merge, Split, Rotate
+și Reorder, de la interfață până la motorul PDF și observabilitate.
 
 > Aceasta este fundația noii arhitecturi, nu încă paritatea funcțională 1:1 cu
 > aplicația originală. Starea exactă și următoarele milestone-uri sunt în
@@ -12,7 +12,7 @@ Rotate, de la interfață până la motorul PDF și observabilitate.
 ## Ce este funcțional
 
 - UI Yew compilat în WASM, cu selectare, validare și descărcare locală;
-- Merge, Split și Rotate implementate în Rust cu `lopdf`;
+- Merge, Split, Rotate și Reorder implementate în Rust cu `lopdf`;
 - procesare într-un Web Worker dedicat, fără blocarea thread-ului UI;
 - transfer de `ArrayBuffer` între UI și worker, fără upload de conținut PDF;
 - protocol worker versionat, cu request ID și erori stabile;
@@ -129,7 +129,8 @@ ore.
 Protocolul curent este `1`. Merge primește între 1 și 64 de documente; Split și
 Rotate primesc exact un document și intervale inclusive, numerotate de la 1.
 La Rotate, lista goală selectează toate paginile, iar unghiurile acceptate sunt
-90, 180 și 270 de grade în sens orar.
+90, 180 și 270 de grade în sens orar. Reorder primește o permutare completă:
+fiecare pagină trebuie inclusă exact o dată.
 Operațiile au o limită cumulată de 256 MiB și refuză PDF-urile criptate.
 
 ```javascript

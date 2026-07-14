@@ -45,8 +45,8 @@ Observability
 
 ## Delivery roadmap
 
-The delivered vertical slices implement merge, split and rotate in WASM. The same engine
-boundary is intended for crop, flatten, text extraction, watermark,
+The delivered vertical slices implement merge, split, rotate and reorder in
+WASM. The same engine boundary is intended for crop, flatten, text extraction, watermark,
 PDF/A conversion, reorder, redact and signing. Authentication (JWT/session,
 WebAuthn/passkeys, backup codes), rate limiting, webhooks, AI/RAG and R2/S3 are
 represented as backend module boundaries and are separate production features;

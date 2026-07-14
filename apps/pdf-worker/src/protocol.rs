@@ -24,6 +24,12 @@ pub enum WorkerRequest {
         ranges: Vec<PageRange>,
         angle_degrees: i16,
     },
+    Reorder {
+        protocol_version: u16,
+        request_id: String,
+        document: serde_bytes::ByteBuf,
+        order: Vec<u32>,
+    },
 }
 
 impl WorkerRequest {
@@ -37,6 +43,9 @@ impl WorkerRequest {
             }
             | Self::Rotate {
                 protocol_version, ..
+            }
+            | Self::Reorder {
+                protocol_version, ..
             } => *protocol_version,
         }
     }
@@ -45,7 +54,8 @@ impl WorkerRequest {
         match self {
             Self::Merge { request_id, .. }
             | Self::Split { request_id, .. }
-            | Self::Rotate { request_id, .. } => request_id,
+            | Self::Rotate { request_id, .. }
+            | Self::Reorder { request_id, .. } => request_id,
         }
     }
 
@@ -54,6 +64,7 @@ impl WorkerRequest {
             Self::Merge { .. } => Operation::Merge,
             Self::Split { .. } => Operation::Split,
             Self::Rotate { .. } => Operation::Rotate,
+            Self::Reorder { .. } => Operation::Reorder,
         }
     }
 }
@@ -64,6 +75,7 @@ pub enum Operation {
     Merge,
     Split,
     Rotate,
+    Reorder,
     Unknown,
 }
 

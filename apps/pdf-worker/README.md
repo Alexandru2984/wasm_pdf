@@ -25,3 +25,7 @@ transferable `Uint8Array` values under `files[].bytes`.
 Rotate requests use `operation: "rotate"`, one `document`, optional inclusive
 `ranges` (empty means all pages), and `angle_degrees` set to `90`, `180`, or
 `270`. The output is one transformed PDF.
+
+Reorder requests use `operation: "reorder"`, one `document`, and an `order`
+array containing a complete one-based page permutation. Missing, duplicate, or
+out-of-bounds page numbers are rejected instead of dropping content silently.

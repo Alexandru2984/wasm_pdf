@@ -13,6 +13,7 @@ pub enum Operation {
     Merge,
     Split,
     Rotate,
+    Reorder,
     Unknown,
 }
 
@@ -22,6 +23,7 @@ impl Operation {
             Self::Merge => "merge",
             Self::Split => "split",
             Self::Rotate => "rotate",
+            Self::Reorder => "reorder",
             Self::Unknown => "unknown",
         }
     }
@@ -49,6 +51,17 @@ pub enum WorkerRequest {
         ranges: Vec<PageRange>,
         angle_degrees: i16,
     },
+    Reorder {
+        request_id: String,
+        document: Vec<u8>,
+        order: Vec<u32>,
+    },
+}
+
+pub struct OperationOptions {
+    pub ranges: Vec<PageRange>,
+    pub angle_degrees: i16,
+    pub order: Vec<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -76,8 +89,7 @@ pub struct WorkerFile {
 pub async fn read_request(
     operation: Operation,
     files: Vec<File>,
-    ranges: Vec<PageRange>,
-    angle_degrees: i16,
+    options: OperationOptions,
 ) -> Result<WorkerRequest, String> {
     let mut documents = Vec::with_capacity(files.len());
     for file in files {
@@ -95,13 +107,18 @@ pub async fn read_request(
         Operation::Split => Ok(WorkerRequest::Split {
             request_id,
             document: documents.into_iter().next().ok_or("Fișierul lipsește.")?,
-            ranges,
+            ranges: options.ranges,
         }),
         Operation::Rotate => Ok(WorkerRequest::Rotate {
             request_id,
             document: documents.into_iter().next().ok_or("Fișierul lipsește.")?,
-            ranges,
-            angle_degrees,
+            ranges: options.ranges,
+            angle_degrees: options.angle_degrees,
+        }),
+        Operation::Reorder => Ok(WorkerRequest::Reorder {
+            request_id,
+            document: documents.into_iter().next().ok_or("Fișierul lipsește.")?,
+            order: options.order,
         }),
         Operation::Unknown => Err("Operația nu este suportată.".to_owned()),
     }
@@ -207,6 +224,19 @@ impl WorkerRequest {
                 }
                 set(&message, "ranges", &values.into())?;
                 set(&message, "angle_degrees", &angle_degrees.into())?;
+            }
+            Self::Reorder {
+                request_id,
+                document,
+                order,
+            } => {
+                set(&message, "request_id", &JsValue::from_str(&request_id))?;
+                set(&message, "operation", &JsValue::from_str("reorder"))?;
+                let bytes = Uint8Array::from(document.as_slice());
+                transfer.push(&bytes.buffer());
+                set(&message, "document", &bytes.into())?;
+                let values = order.into_iter().map(JsValue::from).collect::<Array>();
+                set(&message, "order", &values.into())?;
             }
         }
 

@@ -39,6 +39,9 @@ pub enum Error {
     #[error("input PDF has an invalid page at number {page_number}: {reason}")]
     InvalidPage { page_number: u32, reason: String },
 
+    #[error("page order is invalid: {reason}")]
+    InvalidPageOrder { reason: String },
+
     #[error("could not write the output PDF: {0}")]
     WriteFailed(String),
 }
@@ -57,6 +60,7 @@ impl Error {
             Self::InvalidPageRange { .. } => "invalid_page_range",
             Self::InvalidRotation { .. } => "invalid_rotation",
             Self::InvalidPage { .. } => "invalid_page",
+            Self::InvalidPageOrder { .. } => "invalid_page_order",
             Self::WriteFailed(_) => "write_failed",
         }
     }
