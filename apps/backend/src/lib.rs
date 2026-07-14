@@ -10,7 +10,7 @@ mod observability;
 use std::time::Instant;
 
 pub use auth::AuthService;
-pub use config::{AuthConfig, Config};
+pub use config::{AuthConfig, Config, Environment};
 pub use database::Database;
 pub use metrics::Metrics;
 pub use observability::init_tracing;

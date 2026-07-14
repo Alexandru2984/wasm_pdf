@@ -28,7 +28,11 @@ services:
       APP_HOST: 0.0.0.0
       APP_PORT: 8080
       RUST_LOG: ${RUST_LOG:-backend=info}
-      DATABASE_URL: postgres://${POSTGRES_USER:-pdf_editor}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-pdf_editor}
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: ${POSTGRES_DB:-pdf_editor}
+      DATABASE_USER: ${POSTGRES_USER:-pdf_editor}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
       DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-10}
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
       JWT_SECRET: ${JWT_SECRET:-development-only-change-this-32-byte-secret}

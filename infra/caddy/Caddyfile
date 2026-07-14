@@ -1,0 +1,14 @@
+{$PUBLIC_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	reverse_proxy frontend:8080 {
+		health_uri /healthz
+		health_interval 15s
+		health_timeout 3s
+	}
+}

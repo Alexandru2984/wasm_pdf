@@ -91,6 +91,11 @@ Oprire:
 docker compose down
 ```
 
+Deployment-ul public nu trebuie pornit numai din configurația locală de mai
+sus. Override-ul de producție adaugă TLS automat, secrets montate din fișiere,
+migrare one-shot și elimină expunerea directă a frontend-ului/Grafana. Pașii
+compleți sunt în [ghidul de deployment VPS](docs/deployment.md).
+
 Adaugă `--volumes` numai dacă vrei să ștergi și baza PostgreSQL, plus istoricul
 local Prometheus, Loki și Grafana.
 
@@ -239,6 +244,7 @@ secret, publicarea imaginilor rămâne rezultatul final al pipeline-ului.
 │   └── frontend/Dockerfile
 ├── docs
 │   ├── architecture.md
+│   ├── deployment.md
 │   └── roadmap.md
 ├── infra
 │   ├── grafana                 # provisioning și dashboard
@@ -252,6 +258,7 @@ secret, publicarea imaginilor rămâne rezultatul final al pipeline-ului.
 ├── Cargo.toml                  # workspace și versiuni comune
 ├── Cargo.lock                  # build-uri reproductibile
 ├── docker-compose.yml
+├── compose.production.yml       # secrets, migrare one-shot și Caddy HTTPS
 └── rust-toolchain.toml
 ```
 
