@@ -14,6 +14,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  security:
+    name: Supply-chain security
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Check advisories, licenses, bans, and sources
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check
+          arguments: --all-features --locked
+
+      - name: Audit Rust dependencies
+        uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Scan Git history for secrets
+        run: >-
+          docker run --rm
+          --volume "$PWD:/repo:ro"
+          zricethezav/gitleaks@sha256:090a2715530bd6592342e6a66c3f35eafcaaf2a3227a312482504f9c854997e3
+          detect --source=/repo --no-banner --redact --exit-code=1
+
   rust:
     name: Rust and WASM
     runs-on: ubuntu-latest
@@ -55,6 +85,20 @@ jobs:
 
       - name: Render Docker Compose configuration
         run: docker compose config --quiet
+
+      - name: Render production Docker Compose configuration
+        env:
+          BACKEND_IMAGE: ghcr.io/example/wasm-pdf-backend:sha-test
+          FRONTEND_IMAGE: ghcr.io/example/wasm-pdf-frontend:sha-test
+          PUBLIC_DOMAIN: pdf.example.invalid
+        run: docker compose -f docker-compose.yml -f compose.production.yml config --quiet
+
+      - name: Validate GitHub Actions workflows
+        run: >-
+          docker run --rm
+          --volume "$PWD:/repo:ro"
+          --workdir /repo
+          rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9
 
       - name: Validate Grafana dashboard JSON
         run: jq empty infra/grafana/dashboards/pdf-editor-overview.json

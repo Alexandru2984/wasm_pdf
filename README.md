@@ -216,8 +216,10 @@ loguri corelate.
 ## CI/CD
 
 Workflow-ul `Test` rulează la push și pull request. Toate acțiunile GitHub sunt
-fixate la commit SHA. După un test reușit pe `main`, workflow-ul `Deploy`
-publică imaginile:
+fixate la commit SHA. Pipeline-ul blochează advisories Rust cunoscute, licențe
+sau surse nepermise și secrete ajunse în istoricul Git; validează și ambele
+configurații Compose, inclusiv overlay-ul de producție. După un test reușit pe
+`main`, workflow-ul `Deploy` publică imaginile:
 
 ```text
 ghcr.io/<owner>/<repository>-backend:sha-<commit>

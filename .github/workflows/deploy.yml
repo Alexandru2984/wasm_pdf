@@ -83,11 +83,12 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
-      WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
-      DISPATCH_SHA: ${{ github.sha }}
-      REPOSITORY: ${{ github.repository }}
     steps:
       - name: Notify deployment platform
+        env:
+          WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          DISPATCH_SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           if [ -z "$DEPLOY_WEBHOOK_URL" ]; then
             echo "DEPLOY_WEBHOOK_URL is not configured; images were published only."
@@ -95,6 +96,8 @@ jobs:
           fi
 
           revision="${WORKFLOW_RUN_SHA:-$DISPATCH_SHA}"
+          # REPOSITORY is injected through the step environment by GitHub Actions.
+          # shellcheck disable=SC2153
           repository="${REPOSITORY,,}"
           jq -n \
             --arg revision "$revision" \

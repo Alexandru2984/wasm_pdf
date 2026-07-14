@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+publish = false
 description = "Target-agnostic PDF operations shared by the browser worker and native tests"
 
 [dependencies]
