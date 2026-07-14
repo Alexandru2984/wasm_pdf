@@ -22,6 +22,7 @@ axum-extra = { version = "0.12.6", features = ["cookie"] }
 base64 = "0.22.1"
 console_error_panic_hook = "0.1.7"
 gloo = "0.11.0"
+hmac = "0.13.0"
 js-sys = "0.3.83"
 jsonwebtoken = { version = "10.4.0", default-features = false, features = ["rust_crypto"] }
 lopdf = { version = "0.44.0", default-features = false, features = ["wasm_js"] }

@@ -36,6 +36,9 @@ gestionat de browser și nu este accesibil JavaScript-ului.
   `sub`, `sid`, `jti`, `iat`, `exp` și o versiune revocabilă;
 - evenimentele reușite de register, login, refresh și logout sunt persistate în
   `audit_events`, fără parole sau tokenuri;
+- register, login, refresh și logout sunt limitate prin contoare atomice în
+  PostgreSQL; scope-urile IP, identitate și sesiune sunt pseudonimizate cu HMAC,
+  iar răspunsurile limitate includ `Retry-After`;
 - user-agent-ul este limitat la 512 bytes, iar erorile externe nu dezvăluie
   existența contului la login.
 
@@ -56,7 +59,7 @@ prin HTTPS. Valorile din Compose sunt numai pentru dezvoltare.
 
 ## Funcționalități rămase
 
-Passkeys/WebAuthn, codurile de backup, recuperarea contului și rate limiting-ul
-distribuit sunt verticale separate. Coloanele și tabelele necesare există în
-migrarea inițială, dar niciunul dintre aceste mecanisme nu este prezentat drept
-activ înaintea endpoint-urilor și testelor sale end-to-end.
+Passkeys/WebAuthn, codurile de backup și recuperarea contului sunt verticale
+separate. Coloanele și tabelele necesare există în migrarea inițială, dar
+niciunul dintre aceste mecanisme nu este prezentat drept activ înaintea
+endpoint-urilor și testelor sale end-to-end.

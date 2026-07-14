@@ -11,6 +11,7 @@ use crate::AppState;
 
 use super::error::AuthError;
 use super::model::{AuthResponse, LoginRequest, MeResponse, RegisterRequest, SessionBundle};
+use super::rate_limit::RateLimitCategory;
 use super::service::AuthService;
 
 const SESSION_COOKIE: &str = "pdf_editor_session";
@@ -32,6 +33,13 @@ async fn register(
     Json(request): Json<RegisterRequest>,
 ) -> Result<impl IntoResponse, AuthError> {
     let auth = auth_service(&state)?;
+    auth.enforce_rate_limit(RateLimitCategory::RegisterIp, client_ip(&headers))
+        .await?;
+    auth.enforce_rate_limit(
+        RateLimitCategory::RegisterIdentity,
+        &request.email.trim().to_lowercase(),
+    )
+    .await?;
     let bundle = auth.register(request, user_agent(&headers)).await?;
     let (jar, response) = authenticated_response(jar, auth, bundle);
     Ok((StatusCode::CREATED, jar, Json(response)))
@@ -44,6 +52,13 @@ async fn login(
     Json(request): Json<LoginRequest>,
 ) -> Result<impl IntoResponse, AuthError> {
     let auth = auth_service(&state)?;
+    auth.enforce_rate_limit(RateLimitCategory::LoginIp, client_ip(&headers))
+        .await?;
+    auth.enforce_rate_limit(
+        RateLimitCategory::LoginIdentity,
+        &request.email.trim().to_lowercase(),
+    )
+    .await?;
     let bundle = auth.login(request, user_agent(&headers)).await?;
     let (jar, response) = authenticated_response(jar, auth, bundle);
     Ok((jar, Json(response)))
@@ -56,6 +71,8 @@ async fn refresh(
 ) -> Result<impl IntoResponse, AuthError> {
     let auth = auth_service(&state)?;
     let session = session_token(&jar)?;
+    auth.enforce_rate_limit(RateLimitCategory::RefreshSession, session)
+        .await?;
     let csrf = csrf_token(&headers)?;
     let bundle = auth.refresh(session, csrf, user_agent(&headers)).await?;
     let (jar, response) = authenticated_response(jar, auth, bundle);
@@ -68,12 +85,11 @@ async fn logout(
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, AuthError> {
     let auth = auth_service(&state)?;
-    auth.logout(
-        session_token(&jar)?,
-        csrf_token(&headers)?,
-        user_agent(&headers),
-    )
-    .await?;
+    let session = session_token(&jar)?;
+    auth.enforce_rate_limit(RateLimitCategory::LogoutSession, session)
+        .await?;
+    auth.logout(session, csrf_token(&headers)?, user_agent(&headers))
+        .await?;
     let removal = Cookie::build(SESSION_COOKIE)
         .path("/api/v1/auth")
         .http_only(true)
@@ -137,4 +153,35 @@ fn user_agent(headers: &HeaderMap) -> Option<&str> {
     headers
         .get(header::USER_AGENT)
         .and_then(|value| value.to_str().ok())
+}
+
+fn client_ip(headers: &HeaderMap) -> &str {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(',').next())
+        .map(str::trim)
+        .filter(|value| value.parse::<std::net::IpAddr>().is_ok())
+        .unwrap_or("unknown")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_only_a_valid_first_forwarded_ip() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", "203.0.113.7".parse().expect("header"));
+        assert_eq!(client_ip(&headers), "203.0.113.7");
+
+        headers.insert(
+            "x-forwarded-for",
+            "2001:db8::4, 10.0.0.2".parse().expect("header"),
+        );
+        assert_eq!(client_ip(&headers), "2001:db8::4");
+
+        headers.insert("x-forwarded-for", "forged".parse().expect("header"));
+        assert_eq!(client_ip(&headers), "unknown");
+    }
 }

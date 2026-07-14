@@ -39,7 +39,8 @@ nu prin înlocuirea arbitrară a lui `lopdf`.
 - WebAuthn/passkeys cu verificarea origin/RP ID și protecție anti-replay;
 - coduri de backup generate criptografic, afișate o singură dată și stocate
   numai sub formă de hash;
-- rate limiting distribuit pe identitate, IP și categorie de endpoint;
+- rate limiting distribuit pe identitate, IP/sesiune și categorie de endpoint
+  pentru fluxurile de autentificare — livrat;
 - rotație/revocare și audit pentru register/login/refresh/logout — livrate;
 - recuperare cont și testele complete de autorizare negative.
 

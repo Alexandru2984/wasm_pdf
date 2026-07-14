@@ -157,6 +157,7 @@ dependencies = [
  "axum-extra",
  "base64",
  "email_address",
+ "hmac 0.13.0",
  "jsonwebtoken",
  "prometheus-client",
  "serde",

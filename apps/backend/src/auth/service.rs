@@ -13,6 +13,7 @@ use super::model::{
     AccessClaims, AuthResponse, LoginRequest, MeResponse, PublicUser, RegisterRequest,
     SessionBundle, SessionUserRecord, UserRecord,
 };
+use super::rate_limit::{RateLimitCategory, RateLimiter};
 
 const MAX_LOGIN_ATTEMPTS: i32 = 5;
 const LOGIN_LOCK_MINUTES: i64 = 15;
@@ -30,6 +31,7 @@ pub struct AuthService {
     session_days: i64,
     cookie_secure: bool,
     dummy_password_hash: String,
+    rate_limiter: RateLimiter,
 }
 
 impl AuthService {
@@ -45,6 +47,7 @@ impl AuthService {
         validation.set_audience(&[&config.jwt_audience]);
         validation.leeway = 5;
         let dummy_password_hash = hash_password(random_token()).await?;
+        let rate_limiter = RateLimiter::new(database.clone(), config.jwt_secret.as_bytes());
         Ok(Self {
             database,
             encoding_key: EncodingKey::from_secret(config.jwt_secret.as_bytes()),
@@ -56,6 +59,7 @@ impl AuthService {
             session_days: config.session_days,
             cookie_secure: config.cookie_secure,
             dummy_password_hash,
+            rate_limiter,
         })
     }
 
@@ -65,6 +69,14 @@ impl AuthService {
 
     pub const fn session_days(&self) -> i64 {
         self.session_days
+    }
+
+    pub(crate) async fn enforce_rate_limit(
+        &self,
+        category: RateLimitCategory,
+        scope: &str,
+    ) -> Result<(), AuthError> {
+        self.rate_limiter.enforce(category, scope).await
     }
 
     /// Register a new account and create its initial session.

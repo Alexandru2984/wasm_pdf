@@ -22,6 +22,8 @@ motorul PDF și observabilitate.
 - PostgreSQL 18 cu pool `sqlx`, migrații embedded și readiness dependent de DB;
 - conturi cu parole Argon2id, sesiuni server-side rotative, JWT-uri scurte și
   protecție CSRF pentru operațiile bazate pe cookie;
+- rate limiting distribuit pentru autentificare, cu bucket-uri PostgreSQL,
+  scope-uri HMAC și răspuns standard `429 Retry-After`;
 - telemetrie pentru succes, eroare și durata procesării client-side;
 - NGINX, Prometheus, Loki, Promtail și dashboard Grafana preconfigurat;
 - imagini multi-stage, procese non-root și containere read-only unde este
@@ -251,8 +253,8 @@ secret, publicarea imaginilor rămâne rezultatul final al pipeline-ului.
 - Limita de 256 MiB reduce abuzul, dar memoria efectivă necesară poate depăși
   dimensiunea fișierului în timpul parsării. Limitele browserului rămân valabile.
 - PDF-urile criptate trebuie decriptate înainte de procesare.
-- TLS și rate limiting-ul distribuit sunt obligatorii înainte de expunerea
-  publică; autentificarea prin parolă/sesiune/JWT este livrată, însă passkeys,
+- TLS este obligatoriu înainte de expunerea publică; autentificarea prin
+  parolă/sesiune/JWT și rate limiting-ul distribuit sunt livrate, însă passkeys,
   backup codes și recuperarea contului rămân în lucru.
 - Migrarea inițială include schema pentru utilizatori, sesiuni, passkeys, coduri
   backup și audit.
