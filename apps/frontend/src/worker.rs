@@ -15,6 +15,7 @@ pub enum Operation {
     Rotate,
     Reorder,
     Crop,
+    Watermark,
     Unknown,
 }
 
@@ -26,6 +27,7 @@ impl Operation {
             Self::Rotate => "rotate",
             Self::Reorder => "reorder",
             Self::Crop => "crop",
+            Self::Watermark => "watermark",
             Self::Unknown => "unknown",
         }
     }
@@ -43,6 +45,16 @@ pub struct PdfRect {
     pub bottom: f32,
     pub right: f32,
     pub top: f32,
+}
+
+#[derive(Clone, Debug)]
+pub struct WatermarkOptions {
+    pub text: String,
+    pub x: f32,
+    pub y: f32,
+    pub font_size: f32,
+    pub rotation_degrees: f32,
+    pub opacity: f32,
 }
 
 pub enum WorkerRequest {
@@ -72,6 +84,12 @@ pub enum WorkerRequest {
         ranges: Vec<PageRange>,
         rectangle: PdfRect,
     },
+    Watermark {
+        request_id: String,
+        document: Vec<u8>,
+        ranges: Vec<PageRange>,
+        options: WatermarkOptions,
+    },
 }
 
 pub struct OperationOptions {
@@ -79,6 +97,7 @@ pub struct OperationOptions {
     pub angle_degrees: i16,
     pub order: Vec<u32>,
     pub rectangle: Option<PdfRect>,
+    pub watermark: Option<WatermarkOptions>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -144,6 +163,14 @@ pub async fn read_request(
             rectangle: options
                 .rectangle
                 .ok_or("Dreptunghiul de decupare lipsește.")?,
+        }),
+        Operation::Watermark => Ok(WorkerRequest::Watermark {
+            request_id,
+            document: documents.into_iter().next().ok_or("Fișierul lipsește.")?,
+            ranges: options.ranges,
+            options: options
+                .watermark
+                .ok_or("Configurația watermark lipsește.")?,
         }),
         Operation::Unknown => Err("Operația nu este suportată.".to_owned()),
     }
@@ -215,19 +242,8 @@ impl WorkerRequest {
                 document,
                 ranges,
             } => {
-                set(&message, "request_id", &JsValue::from_str(&request_id))?;
-                set(&message, "operation", &JsValue::from_str("split"))?;
-                let bytes = Uint8Array::from(document.as_slice());
-                transfer.push(&bytes.buffer());
-                set(&message, "document", &bytes.into())?;
-                let values = Array::new();
-                for range in ranges {
-                    let value = Object::new();
-                    set(&value, "start", &range.start.into())?;
-                    set(&value, "end", &range.end.into())?;
-                    values.push(&value);
-                }
-                set(&message, "ranges", &values.into())?;
+                set_document_request(&message, &transfer, &request_id, "split", &document)?;
+                set(&message, "ranges", &ranges_to_js(ranges)?.into())?;
             }
             Self::Rotate {
                 request_id,
@@ -235,19 +251,8 @@ impl WorkerRequest {
                 ranges,
                 angle_degrees,
             } => {
-                set(&message, "request_id", &JsValue::from_str(&request_id))?;
-                set(&message, "operation", &JsValue::from_str("rotate"))?;
-                let bytes = Uint8Array::from(document.as_slice());
-                transfer.push(&bytes.buffer());
-                set(&message, "document", &bytes.into())?;
-                let values = Array::new();
-                for range in ranges {
-                    let value = Object::new();
-                    set(&value, "start", &range.start.into())?;
-                    set(&value, "end", &range.end.into())?;
-                    values.push(&value);
-                }
-                set(&message, "ranges", &values.into())?;
+                set_document_request(&message, &transfer, &request_id, "rotate", &document)?;
+                set(&message, "ranges", &ranges_to_js(ranges)?.into())?;
                 set(&message, "angle_degrees", &angle_degrees.into())?;
             }
             Self::Reorder {
@@ -255,11 +260,7 @@ impl WorkerRequest {
                 document,
                 order,
             } => {
-                set(&message, "request_id", &JsValue::from_str(&request_id))?;
-                set(&message, "operation", &JsValue::from_str("reorder"))?;
-                let bytes = Uint8Array::from(document.as_slice());
-                transfer.push(&bytes.buffer());
-                set(&message, "document", &bytes.into())?;
+                set_document_request(&message, &transfer, &request_id, "reorder", &document)?;
                 let values = order.into_iter().map(JsValue::from).collect::<Array>();
                 set(&message, "order", &values.into())?;
             }
@@ -269,19 +270,8 @@ impl WorkerRequest {
                 ranges,
                 rectangle,
             } => {
-                set(&message, "request_id", &JsValue::from_str(&request_id))?;
-                set(&message, "operation", &JsValue::from_str("crop"))?;
-                let bytes = Uint8Array::from(document.as_slice());
-                transfer.push(&bytes.buffer());
-                set(&message, "document", &bytes.into())?;
-                let values = Array::new();
-                for range in ranges {
-                    let value = Object::new();
-                    set(&value, "start", &range.start.into())?;
-                    set(&value, "end", &range.end.into())?;
-                    values.push(&value);
-                }
-                set(&message, "ranges", &values.into())?;
+                set_document_request(&message, &transfer, &request_id, "crop", &document)?;
+                set(&message, "ranges", &ranges_to_js(ranges)?.into())?;
                 let value = Object::new();
                 set(&value, "left", &rectangle.left.into())?;
                 set(&value, "bottom", &rectangle.bottom.into())?;
@@ -289,10 +279,52 @@ impl WorkerRequest {
                 set(&value, "top", &rectangle.top.into())?;
                 set(&message, "rectangle", &value.into())?;
             }
+            Self::Watermark {
+                request_id,
+                document,
+                ranges,
+                options,
+            } => {
+                set_document_request(&message, &transfer, &request_id, "watermark", &document)?;
+                set(&message, "ranges", &ranges_to_js(ranges)?.into())?;
+                let value = Object::new();
+                set(&value, "text", &JsValue::from_str(&options.text))?;
+                set(&value, "x", &options.x.into())?;
+                set(&value, "y", &options.y.into())?;
+                set(&value, "font_size", &options.font_size.into())?;
+                set(&value, "rotation_degrees", &options.rotation_degrees.into())?;
+                set(&value, "opacity", &options.opacity.into())?;
+                set(&message, "options", &value.into())?;
+            }
         }
 
         Ok((message.into(), transfer))
     }
+}
+
+fn set_document_request(
+    message: &Object,
+    transfer: &Array,
+    request_id: &str,
+    operation: &str,
+    document: &[u8],
+) -> Result<(), String> {
+    set(message, "request_id", &JsValue::from_str(request_id))?;
+    set(message, "operation", &JsValue::from_str(operation))?;
+    let bytes = Uint8Array::from(document);
+    transfer.push(&bytes.buffer());
+    set(message, "document", &bytes.into())
+}
+
+fn ranges_to_js(ranges: Vec<PageRange>) -> Result<Array, String> {
+    let values = Array::new();
+    for range in ranges {
+        let value = Object::new();
+        set(&value, "start", &range.start.into())?;
+        set(&value, "end", &range.end.into())?;
+        values.push(&value);
+    }
+    Ok(values)
 }
 
 fn set(object: &Object, key: &str, value: &JsValue) -> Result<(), String> {

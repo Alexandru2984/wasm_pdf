@@ -45,6 +45,9 @@ pub enum Error {
     #[error("crop rectangle is invalid: {reason}")]
     InvalidRectangle { reason: String },
 
+    #[error("watermark is invalid: {reason}")]
+    InvalidWatermark { reason: String },
+
     #[error("could not write the output PDF: {0}")]
     WriteFailed(String),
 }
@@ -65,6 +68,7 @@ impl Error {
             Self::InvalidPage { .. } => "invalid_page",
             Self::InvalidPageOrder { .. } => "invalid_page_order",
             Self::InvalidRectangle { .. } => "invalid_rectangle",
+            Self::InvalidWatermark { .. } => "invalid_watermark",
             Self::WriteFailed(_) => "write_failed",
         }
     }

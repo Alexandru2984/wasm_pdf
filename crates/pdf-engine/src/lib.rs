@@ -11,6 +11,7 @@ mod page_tree;
 mod reorder;
 mod rotate;
 mod split;
+mod watermark;
 
 pub use crop::{PdfRect, crop};
 pub use error::{Error, Result};
@@ -18,6 +19,7 @@ pub use merge::merge;
 pub use reorder::reorder;
 pub use rotate::rotate;
 pub use split::{PageRange, split};
+pub use watermark::{WatermarkOptions, watermark};
 
 /// Engine version exposed to all execution targets.
 pub const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");

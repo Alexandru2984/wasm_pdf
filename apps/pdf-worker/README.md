@@ -33,3 +33,8 @@ out-of-bounds page numbers are rejected instead of dropping content silently.
 Crop requests use `operation: "crop"`, one `document`, optional inclusive
 `ranges`, and `rectangle: { left, bottom, right, top }` in PDF points. Empty
 ranges select all pages; the rectangle must fit every selected page's MediaBox.
+
+Watermark requests use `operation: "watermark"`, one `document`, optional
+`ranges`, and `options` containing `text`, `x`, `y`, `font_size`,
+`rotation_degrees`, and `opacity`. Text is appended to the page content stream;
+the current standard-font implementation accepts printable ASCII.

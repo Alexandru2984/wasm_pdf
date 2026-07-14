@@ -4,7 +4,7 @@ use gloo::net::http::Request;
 use serde::Serialize;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{Event, HtmlInputElement, HtmlSelectElement, InputEvent, Url};
-use worker::{Operation, OperationOptions, PageRange, PdfRect, WorkerResponse};
+use worker::{Operation, OperationOptions, PageRange, PdfRect, WatermarkOptions, WorkerResponse};
 use yew::prelude::*;
 
 #[derive(Clone, PartialEq)]
@@ -21,6 +21,8 @@ fn app() -> Html {
     let angle_degrees = use_state(|| 90_i16);
     let order_text = use_state(String::new);
     let crop_text = use_state(|| "0, 0, 595, 842".to_owned());
+    let watermark_text = use_state(|| "CONFIDENTIAL".to_owned());
+    let watermark_geometry = use_state(|| "72, 400, 48, 30, 0.25".to_owned());
     let busy = use_state(|| false);
     let error = use_state(|| None::<String>);
     let downloads = use_state(Vec::<DownloadFile>::new);
@@ -37,6 +39,7 @@ fn app() -> Html {
                 "rotate" => Operation::Rotate,
                 "reorder" => Operation::Reorder,
                 "crop" => Operation::Crop,
+                "watermark" => Operation::Watermark,
                 _ => Operation::Merge,
             };
             operation.set(next);
@@ -93,6 +96,8 @@ fn app() -> Html {
         let angle_degrees = angle_degrees.clone();
         let order_text = order_text.clone();
         let crop_text = crop_text.clone();
+        let watermark_text = watermark_text.clone();
+        let watermark_geometry = watermark_geometry.clone();
         let busy = busy.clone();
         let error = error.clone();
         let downloads = downloads.clone();
@@ -111,8 +116,10 @@ fn app() -> Html {
                 return;
             }
             let ranges = if current_operation == Operation::Split
-                || (matches!(current_operation, Operation::Rotate | Operation::Crop)
-                    && !range_text.trim().is_empty())
+                || (matches!(
+                    current_operation,
+                    Operation::Rotate | Operation::Crop | Operation::Watermark
+                ) && !range_text.trim().is_empty())
             {
                 match parse_ranges(&range_text) {
                     Ok(ranges) => ranges,
@@ -147,6 +154,17 @@ fn app() -> Html {
             } else {
                 None
             };
+            let watermark = if current_operation == Operation::Watermark {
+                match parse_watermark(&watermark_text, &watermark_geometry) {
+                    Ok(options) => Some(options),
+                    Err(message) => {
+                        error.set(Some(message));
+                        return;
+                    }
+                }
+            } else {
+                None
+            };
 
             busy.set(true);
             error.set(None);
@@ -165,6 +183,7 @@ fn app() -> Html {
                         angle_degrees: current_angle,
                         order,
                         rectangle,
+                        watermark,
                     },
                 )
                 .await
@@ -226,6 +245,7 @@ fn app() -> Html {
     let is_rotate = *operation == Operation::Rotate;
     let is_reorder = *operation == Operation::Reorder;
     let is_crop = *operation == Operation::Crop;
+    let is_watermark = *operation == Operation::Watermark;
     let file_summary = if files.is_empty() {
         "Niciun fișier selectat".to_owned()
     } else {
@@ -258,6 +278,7 @@ fn app() -> Html {
                     <option value="rotate" selected={is_rotate}>{"Rotate — rotește pagini"}</option>
                     <option value="reorder" selected={is_reorder}>{"Reorder — reordonează pagini"}</option>
                     <option value="crop" selected={is_crop}>{"Crop — decupează pagini"}</option>
+                    <option value="watermark" selected={is_watermark}>{"Watermark — aplică text"}</option>
                 </select>
 
                 <div class="upload-zone">
@@ -278,21 +299,21 @@ fn app() -> Html {
                     <p class="file-summary">{file_summary}</p>
                 </div>
 
-                if is_split || is_rotate || is_crop {
+                if is_split || is_rotate || is_crop || is_watermark {
                     <div class="range-field">
                         <label class="field-label" for="ranges">
-                            {if is_rotate { "Pagini de rotit" } else if is_crop { "Pagini de decupat" } else { "Intervale de pagini" }}
+                            {if is_rotate { "Pagini de rotit" } else if is_crop { "Pagini de decupat" } else if is_watermark { "Pagini pentru watermark" } else { "Intervale de pagini" }}
                         </label>
                         <input
                             id="ranges"
                             type="text"
                             value={(*range_text).clone()}
                             oninput={on_range_change}
-                            placeholder={if is_rotate || is_crop { "Gol = toate paginile; ex. 1-3, 5" } else { "1-3, 5, 8-10" }}
+                            placeholder={if is_rotate || is_crop || is_watermark { "Gol = toate paginile; ex. 1-3, 5" } else { "1-3, 5, 8-10" }}
                             disabled={*busy}
                         />
                         <small>
-                            {if is_rotate || is_crop { "Lasă gol pentru toate paginile. Intervalele sunt inclusive." } else { "Intervalele sunt inclusive și numerotate de la 1." }}
+                            {if is_rotate || is_crop || is_watermark { "Lasă gol pentru toate paginile. Intervalele sunt inclusive." } else { "Intervalele sunt inclusive și numerotate de la 1." }}
                         </small>
                     </div>
                 }
@@ -350,6 +371,42 @@ fn app() -> Html {
                     </div>
                 }
 
+                if is_watermark {
+                    <div class="range-field">
+                        <label class="field-label" for="watermark-text">{"Text watermark"}</label>
+                        <input
+                            id="watermark-text"
+                            type="text"
+                            value={(*watermark_text).clone()}
+                            oninput={{
+                                let watermark_text = watermark_text.clone();
+                                Callback::from(move |event: InputEvent| {
+                                    let input = event.target_unchecked_into::<HtmlInputElement>();
+                                    watermark_text.set(input.value());
+                                })
+                            }}
+                            maxlength="256"
+                            disabled={*busy}
+                        />
+                        <label class="field-label" for="watermark-options">{"x, y, mărime, rotație, opacitate"}</label>
+                        <input
+                            id="watermark-options"
+                            type="text"
+                            value={(*watermark_geometry).clone()}
+                            oninput={{
+                                let watermark_geometry = watermark_geometry.clone();
+                                Callback::from(move |event: InputEvent| {
+                                    let input = event.target_unchecked_into::<HtmlInputElement>();
+                                    watermark_geometry.set(input.value());
+                                })
+                            }}
+                            placeholder="72, 400, 48, 30, 0.25"
+                            disabled={*busy}
+                        />
+                        <small>{"Text ASCII imprimabil; opacitatea este în intervalul (0, 1]."}</small>
+                    </div>
+                }
+
                 <button class="process-button" onclick={on_process} disabled={*busy || files.is_empty()}>
                     if *busy {
                         <span class="spinner" aria-hidden="true"></span>
@@ -362,6 +419,8 @@ fn app() -> Html {
                         {"Reordonează documentul"}
                     } else if is_crop {
                         {"Decupează paginile"}
+                    } else if is_watermark {
+                        {"Aplică watermark"}
                     } else {
                         {"Unește documentele"}
                     }
@@ -491,6 +550,48 @@ fn parse_rectangle(value: &str) -> Result<PdfRect, String> {
         bottom: *bottom,
         right: *right,
         top: *top,
+    })
+}
+
+fn parse_watermark(text: &str, value: &str) -> Result<WatermarkOptions, String> {
+    if text.is_empty() || text.len() > 256 {
+        return Err("Textul watermark trebuie să aibă între 1 și 256 bytes.".to_owned());
+    }
+    if !text
+        .bytes()
+        .all(|byte| byte == b' ' || byte.is_ascii_graphic())
+    {
+        return Err(
+            "Watermark-ul standard acceptă momentan caractere ASCII imprimabile.".to_owned(),
+        );
+    }
+    let values = value
+        .split(',')
+        .map(str::trim)
+        .map(|item| {
+            item.parse::<f32>()
+                .map_err(|_| format!("Valoarea „{item}” nu este validă."))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let [x, y, font_size, rotation_degrees, opacity] = values.as_slice() else {
+        return Err("Introdu exact: x, y, mărime, rotație, opacitate.".to_owned());
+    };
+    if !values.iter().all(|number| number.is_finite()) {
+        return Err("Opțiunile watermark trebuie să fie numere finite.".to_owned());
+    }
+    if !(1.0..=500.0).contains(font_size) {
+        return Err("Mărimea fontului trebuie să fie între 1 și 500.".to_owned());
+    }
+    if !(0.0 < *opacity && *opacity <= 1.0) {
+        return Err("Opacitatea trebuie să fie mai mare decât 0 și cel mult 1.".to_owned());
+    }
+    Ok(WatermarkOptions {
+        text: text.to_owned(),
+        x: *x,
+        y: *y,
+        font_size: *font_size,
+        rotation_degrees: *rotation_degrees,
+        opacity: *opacity,
     })
 }
 

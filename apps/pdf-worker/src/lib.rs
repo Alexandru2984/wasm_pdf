@@ -2,7 +2,7 @@
 
 mod protocol;
 
-use pdf_engine::{Error as EngineError, crop, merge, reorder, rotate, split};
+use pdf_engine::{Error as EngineError, crop, merge, reorder, rotate, split, watermark};
 use protocol::{Operation, PROTOCOL_VERSION, WorkerRequest, WorkerResponse};
 use wasm_bindgen::prelude::*;
 
@@ -79,6 +79,12 @@ fn process(request: WorkerRequest, started_at: f64) -> WorkerResponse {
             rectangle,
             ..
         } => crop(&document, &ranges, rectangle).map(|bytes| vec![bytes]),
+        WorkerRequest::Watermark {
+            document,
+            ranges,
+            options,
+            ..
+        } => watermark(&document, &ranges, &options).map(|bytes| vec![bytes]),
     };
 
     match result {

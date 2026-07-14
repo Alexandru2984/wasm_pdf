@@ -1,4 +1,4 @@
-use pdf_engine::{PageRange, PdfRect};
+use pdf_engine::{PageRange, PdfRect, WatermarkOptions};
 use serde::{Deserialize, Serialize};
 
 pub const PROTOCOL_VERSION: u16 = 1;
@@ -37,6 +37,13 @@ pub enum WorkerRequest {
         ranges: Vec<PageRange>,
         rectangle: PdfRect,
     },
+    Watermark {
+        protocol_version: u16,
+        request_id: String,
+        document: serde_bytes::ByteBuf,
+        ranges: Vec<PageRange>,
+        options: WatermarkOptions,
+    },
 }
 
 impl WorkerRequest {
@@ -56,6 +63,9 @@ impl WorkerRequest {
             }
             | Self::Crop {
                 protocol_version, ..
+            }
+            | Self::Watermark {
+                protocol_version, ..
             } => *protocol_version,
         }
     }
@@ -66,7 +76,8 @@ impl WorkerRequest {
             | Self::Split { request_id, .. }
             | Self::Rotate { request_id, .. }
             | Self::Reorder { request_id, .. }
-            | Self::Crop { request_id, .. } => request_id,
+            | Self::Crop { request_id, .. }
+            | Self::Watermark { request_id, .. } => request_id,
         }
     }
 
@@ -77,6 +88,7 @@ impl WorkerRequest {
             Self::Rotate { .. } => Operation::Rotate,
             Self::Reorder { .. } => Operation::Reorder,
             Self::Crop { .. } => Operation::Crop,
+            Self::Watermark { .. } => Operation::Watermark,
         }
     }
 }
@@ -89,6 +101,7 @@ pub enum Operation {
     Rotate,
     Reorder,
     Crop,
+    Watermark,
     Unknown,
 }
 
