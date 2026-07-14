@@ -15,6 +15,7 @@ pub struct Config {
     pub run_migrations: bool,
     pub auth: AuthConfig,
     pub email: EmailConfig,
+    pub maintenance: MaintenanceConfig,
 }
 
 #[derive(Clone)]
@@ -49,6 +50,13 @@ pub struct EmailConfig {
     pub smtp_tls: SmtpTls,
     pub from_address: String,
     pub from_name: String,
+}
+
+#[derive(Clone)]
+pub struct MaintenanceConfig {
+    pub audit_retention_days: i64,
+    pub session_retention_days: i64,
+    pub interval_seconds: u64,
 }
 
 pub struct RuntimeDatabaseRole {
@@ -108,6 +116,7 @@ impl Config {
         let webauthn_rp_origin = nonempty_env("WEBAUTHN_RP_ORIGIN", "http://localhost:8080")?;
         let webauthn_rp_name = nonempty_env("WEBAUTHN_RP_NAME", "PDF Editor")?;
         let email = email_config(&webauthn_rp_origin)?;
+        let maintenance = MaintenanceConfig::from_env()?;
 
         if environment == Environment::Production {
             validate_production(
@@ -140,6 +149,7 @@ impl Config {
                 webauthn_rp_name,
             },
             email,
+            maintenance,
         })
     }
 
@@ -206,6 +216,21 @@ impl RuntimeDatabaseRole {
     }
 }
 
+impl MaintenanceConfig {
+    /// Load bounded data-retention policy settings.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a retention or scheduling value is out of range.
+    pub fn from_env() -> anyhow::Result<Self> {
+        Ok(Self {
+            audit_retention_days: parse_i64_range("AUDIT_RETENTION_DAYS", 365, 30, 3_650)?,
+            session_retention_days: parse_i64_range("SESSION_RETENTION_DAYS", 30, 1, 365)?,
+            interval_seconds: parse_u64_range("MAINTENANCE_INTERVAL_SECONDS", 21_600, 300, 86_400)?,
+        })
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -239,6 +264,11 @@ impl Default for Config {
                 smtp_tls: SmtpTls::None,
                 from_address: "no-reply@localhost".to_owned(),
                 from_name: "PDF Editor".to_owned(),
+            },
+            maintenance: MaintenanceConfig {
+                audit_retention_days: 365,
+                session_retention_days: 30,
+                interval_seconds: 21_600,
             },
         }
     }
@@ -449,6 +479,17 @@ fn parse_i64_range(name: &str, default: i64, minimum: i64, maximum: i64) -> anyh
     let value = std::env::var(name)
         .unwrap_or_else(|_| default.to_string())
         .parse::<i64>()
+        .with_context(|| format!("{name} must be an integer"))?;
+    if !(minimum..=maximum).contains(&value) {
+        bail!("{name} must be between {minimum} and {maximum}");
+    }
+    Ok(value)
+}
+
+fn parse_u64_range(name: &str, default: u64, minimum: u64, maximum: u64) -> anyhow::Result<u64> {
+    let value = std::env::var(name)
+        .unwrap_or_else(|_| default.to_string())
+        .parse::<u64>()
         .with_context(|| format!("{name} must be an integer"))?;
     if !(minimum..=maximum).contains(&value) {
         bail!("{name} must be between {minimum} and {maximum}");

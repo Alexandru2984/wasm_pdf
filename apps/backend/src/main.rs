@@ -1,7 +1,7 @@
 use anyhow::Context;
 use backend::{
-    AppState, AuthService, Config, Database, DatabaseConfig, EmailService, RuntimeDatabaseRole,
-    build_router, init_tracing,
+    AppState, AuthService, Config, Database, DatabaseConfig, EmailService, MaintenanceConfig,
+    MaintenanceService, Metrics, RuntimeDatabaseRole, build_router, init_tracing,
 };
 use std::{
     io::{Read, Write},
@@ -15,16 +15,20 @@ async fn main() -> anyhow::Result<()> {
     if command.as_deref() == Some("healthcheck") {
         return healthcheck();
     }
-    if command
-        .as_deref()
-        .is_some_and(|command| !matches!(command, "migrate" | "provision-database-role"))
-    {
-        anyhow::bail!("supported commands: healthcheck, migrate, provision-database-role");
+    if command.as_deref().is_some_and(|command| {
+        !matches!(
+            command,
+            "migrate" | "provision-database-role" | "maintenance"
+        )
+    }) {
+        anyhow::bail!(
+            "supported commands: healthcheck, migrate, provision-database-role, maintenance"
+        );
     }
 
     if matches!(
         command.as_deref(),
-        Some("migrate" | "provision-database-role")
+        Some("migrate" | "provision-database-role" | "maintenance")
     ) {
         let log_filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "backend=info".to_owned());
         if log_filter.trim().is_empty() {
@@ -32,18 +36,25 @@ async fn main() -> anyhow::Result<()> {
         }
         init_tracing(&log_filter)?;
         let database_config = DatabaseConfig::from_env()?;
-        let database = Database::connect_with(&database_config).await?;
-
         if command.as_deref() == Some("migrate") {
             if !database_config.run_migrations {
                 anyhow::bail!("the migrate command requires RUN_MIGRATIONS=true");
             }
+        } else if database_config.run_migrations {
+            anyhow::bail!("one-shot database commands require RUN_MIGRATIONS=false");
+        }
+        let database = Database::connect_with(&database_config).await?;
+
+        if command.as_deref() == Some("migrate") {
             tracing::info!("database_migrations_completed");
             return Ok(());
         }
 
-        if database_config.run_migrations {
-            anyhow::bail!("the provision-database-role command requires RUN_MIGRATIONS=false");
+        if command.as_deref() == Some("maintenance") {
+            let maintenance =
+                MaintenanceService::new(database, MaintenanceConfig::from_env()?, Metrics::new());
+            maintenance.run_once().await?;
+            return Ok(());
         }
         let role = RuntimeDatabaseRole::from_env()?;
         database.provision_runtime_role(&role).await?;
@@ -55,12 +66,18 @@ async fn main() -> anyhow::Result<()> {
     init_tracing(&config.log_filter)?;
     let database = Database::connect(&config).await?;
     let mut state = AppState::with_database(database.clone());
+    let maintenance = MaintenanceService::new(
+        database.clone(),
+        config.maintenance.clone(),
+        state.metrics.clone(),
+    );
     let email = EmailService::from_config(database.clone(), &config.email, state.metrics.clone())?;
     let email_dispatcher = email.as_ref().map(EmailService::spawn_dispatcher);
     let auth = AuthService::new(database.clone(), &config.auth, email)
         .await
         .map_err(|error| anyhow::anyhow!("could not initialize authentication: {error:?}"))?;
     state.auth = Some(auth);
+    let maintenance_worker = maintenance.spawn();
 
     let address = config.socket_address();
     let listener = tokio::net::TcpListener::bind(address)
@@ -77,6 +94,7 @@ async fn main() -> anyhow::Result<()> {
     if let Some(dispatcher) = email_dispatcher {
         dispatcher.abort();
     }
+    maintenance_worker.abort();
 
     Ok(())
 }

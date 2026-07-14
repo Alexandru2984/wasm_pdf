@@ -35,6 +35,16 @@ struct EmailDeliveryLabels {
     status: String,
 }
 
+#[derive(Clone, Debug, EncodeLabelSet, Eq, Hash, PartialEq)]
+struct MaintenanceLabels {
+    category: String,
+}
+
+#[derive(Clone, Debug, EncodeLabelSet, Eq, Hash, PartialEq)]
+struct MaintenanceRunLabels {
+    status: String,
+}
+
 /// Application metrics and their immutable `OpenMetrics` registry.
 #[derive(Clone)]
 pub struct Metrics {
@@ -44,6 +54,8 @@ pub struct Metrics {
     pdf_operations: Family<PdfOperationLabels, Counter>,
     pdf_duration: Family<PdfDurationLabels, Histogram>,
     email_deliveries: Family<EmailDeliveryLabels, Counter>,
+    maintenance_deletions: Family<MaintenanceLabels, Counter>,
+    maintenance_runs: Family<MaintenanceRunLabels, Counter>,
 }
 
 impl Metrics {
@@ -57,6 +69,8 @@ impl Metrics {
             Histogram::new([0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0])
         });
         let email_deliveries = Family::<EmailDeliveryLabels, Counter>::default();
+        let maintenance_deletions = Family::<MaintenanceLabels, Counter>::default();
+        let maintenance_runs = Family::<MaintenanceRunLabels, Counter>::default();
 
         let mut registry = Registry::default();
         registry.register(
@@ -84,6 +98,16 @@ impl Metrics {
             "Email outbox delivery attempts by bounded outcome",
             email_deliveries.clone(),
         );
+        registry.register(
+            "pdf_editor_maintenance_deletions",
+            "Rows deleted by bounded data-retention category",
+            maintenance_deletions.clone(),
+        );
+        registry.register(
+            "pdf_editor_maintenance_runs",
+            "Data-retention maintenance runs by bounded outcome",
+            maintenance_runs.clone(),
+        );
 
         Self {
             registry: Arc::new(registry),
@@ -92,6 +116,8 @@ impl Metrics {
             pdf_operations,
             pdf_duration,
             email_deliveries,
+            maintenance_deletions,
+            maintenance_runs,
         }
     }
 
@@ -129,6 +155,31 @@ impl Metrics {
         debug_assert!(matches!(status, "sent" | "retry" | "dead"));
         self.email_deliveries
             .get_or_create(&EmailDeliveryLabels {
+                status: status.to_owned(),
+            })
+            .inc();
+    }
+
+    pub fn observe_maintenance_deletions(&self, category: &str, rows: u64) {
+        debug_assert!(matches!(
+            category,
+            "sessions"
+                | "webauthn_ceremonies"
+                | "rate_limit_buckets"
+                | "account_tokens"
+                | "audit_events"
+        ));
+        self.maintenance_deletions
+            .get_or_create(&MaintenanceLabels {
+                category: category.to_owned(),
+            })
+            .inc_by(rows);
+    }
+
+    pub fn observe_maintenance_run(&self, status: &str) {
+        debug_assert!(matches!(status, "success" | "skipped" | "error"));
+        self.maintenance_runs
+            .get_or_create(&MaintenanceRunLabels {
                 status: status.to_owned(),
             })
             .inc();

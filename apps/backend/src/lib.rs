@@ -5,6 +5,7 @@ mod config;
 mod database;
 mod email;
 mod http;
+mod maintenance;
 mod metrics;
 mod observability;
 
@@ -12,10 +13,12 @@ use std::time::Instant;
 
 pub use auth::AuthService;
 pub use config::{
-    AuthConfig, Config, DatabaseConfig, EmailConfig, Environment, RuntimeDatabaseRole, SmtpTls,
+    AuthConfig, Config, DatabaseConfig, EmailConfig, Environment, MaintenanceConfig,
+    RuntimeDatabaseRole, SmtpTls,
 };
 pub use database::Database;
 pub use email::EmailService;
+pub use maintenance::MaintenanceService;
 pub use metrics::Metrics;
 pub use observability::init_tracing;
 

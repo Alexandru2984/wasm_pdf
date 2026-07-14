@@ -70,6 +70,9 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --locked
 
+      - name: Verify database runtime privileges and retention
+        run: scripts/test-database-security.sh
+
       - name: Check PDF worker WASM target
         run: cargo check --package pdf-worker --target wasm32-unknown-unknown --release --locked
 
@@ -111,6 +114,7 @@ jobs:
           /repo/scripts/backup-postgres.sh
           /repo/scripts/deploy-vps.sh
           /repo/scripts/render-nginx-csp.sh
+          /repo/scripts/test-database-security.sh
           /repo/scripts/verify-postgres-backup.sh
           /repo/scripts/restore-postgres.sh
 

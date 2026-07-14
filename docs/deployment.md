@@ -116,6 +116,14 @@ The `migrate` service runs embedded SQLx migrations to completion before the
 backend starts. Backend replicas use `RUN_MIGRATIONS=false`, so schema changes
 do not race during rollout.
 
+Each backend replica also runs bounded data-retention maintenance. A PostgreSQL
+transaction advisory lock ensures that only one replica cleans at a time.
+Expired Passkey ceremonies and rate-limit buckets are removed immediately,
+account-link records after seven days, expired/revoked sessions after
+`SESSION_RETENTION_DAYS` (30 by default), and security audit events after
+`AUDIT_RETENTION_DAYS` (365 by default). Cleanup runs in batches of 1,000 at
+`MAINTENANCE_INTERVAL_SECONDS` and exports deletion/run metrics to Prometheus.
+
 ## Automated rollout from GitHub
 
 The deployment workflow publishes SBOM/provenance-enabled images tagged with
