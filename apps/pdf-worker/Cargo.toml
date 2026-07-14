@@ -21,3 +21,9 @@ web-sys = { workspace = true, features = ["DedicatedWorkerGlobalScope", "Message
 
 [lints]
 workspace = true
+
+# wasm-pack 0.15 currently bundles a wasm-opt build that rejects bulk-memory
+# instructions emitted by Rust 1.96. The workspace release profile still uses
+# size optimization and LTO; re-enable this when the bundled Binaryen catches up.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false

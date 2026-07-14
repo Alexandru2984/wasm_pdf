@@ -9,7 +9,6 @@ minify = "on_release"
 watch = ["src", "styles.css", "index.html"]
 
 [serve]
-address = "127.0.0.1"
+addresses = ["127.0.0.1"]
 port = 8081
 open = false
-
