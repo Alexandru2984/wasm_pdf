@@ -3,7 +3,7 @@ mod worker;
 use gloo::net::http::Request;
 use serde::Serialize;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{Event, HtmlInputElement, HtmlSelectElement, InputEvent, Url};
+use web_sys::{BlobPropertyBag, Event, HtmlInputElement, HtmlSelectElement, InputEvent, Url};
 use worker::{Operation, OperationOptions, PageRange, PdfRect, WatermarkOptions, WorkerResponse};
 use yew::prelude::*;
 
@@ -40,6 +40,7 @@ fn app() -> Html {
                 "reorder" => Operation::Reorder,
                 "crop" => Operation::Crop,
                 "watermark" => Operation::Watermark,
+                "extract_text" => Operation::ExtractText,
                 _ => Operation::Merge,
             };
             operation.set(next);
@@ -118,7 +119,10 @@ fn app() -> Html {
             let ranges = if current_operation == Operation::Split
                 || (matches!(
                     current_operation,
-                    Operation::Rotate | Operation::Crop | Operation::Watermark
+                    Operation::Rotate
+                        | Operation::Crop
+                        | Operation::Watermark
+                        | Operation::ExtractText
                 ) && !range_text.trim().is_empty())
             {
                 match parse_ranges(&range_text) {
@@ -246,6 +250,7 @@ fn app() -> Html {
     let is_reorder = *operation == Operation::Reorder;
     let is_crop = *operation == Operation::Crop;
     let is_watermark = *operation == Operation::Watermark;
+    let is_extract_text = *operation == Operation::ExtractText;
     let file_summary = if files.is_empty() {
         "Niciun fișier selectat".to_owned()
     } else {
@@ -279,6 +284,7 @@ fn app() -> Html {
                     <option value="reorder" selected={is_reorder}>{"Reorder — reordonează pagini"}</option>
                     <option value="crop" selected={is_crop}>{"Crop — decupează pagini"}</option>
                     <option value="watermark" selected={is_watermark}>{"Watermark — aplică text"}</option>
+                    <option value="extract_text" selected={is_extract_text}>{"Extract Text — exportă text"}</option>
                 </select>
 
                 <div class="upload-zone">
@@ -299,21 +305,21 @@ fn app() -> Html {
                     <p class="file-summary">{file_summary}</p>
                 </div>
 
-                if is_split || is_rotate || is_crop || is_watermark {
+                if is_split || is_rotate || is_crop || is_watermark || is_extract_text {
                     <div class="range-field">
                         <label class="field-label" for="ranges">
-                            {if is_rotate { "Pagini de rotit" } else if is_crop { "Pagini de decupat" } else if is_watermark { "Pagini pentru watermark" } else { "Intervale de pagini" }}
+                            {if is_rotate { "Pagini de rotit" } else if is_crop { "Pagini de decupat" } else if is_watermark { "Pagini pentru watermark" } else if is_extract_text { "Pagini pentru extragerea textului" } else { "Intervale de pagini" }}
                         </label>
                         <input
                             id="ranges"
                             type="text"
                             value={(*range_text).clone()}
                             oninput={on_range_change}
-                            placeholder={if is_rotate || is_crop || is_watermark { "Gol = toate paginile; ex. 1-3, 5" } else { "1-3, 5, 8-10" }}
+                            placeholder={if is_rotate || is_crop || is_watermark || is_extract_text { "Gol = toate paginile; ex. 1-3, 5" } else { "1-3, 5, 8-10" }}
                             disabled={*busy}
                         />
                         <small>
-                            {if is_rotate || is_crop || is_watermark { "Lasă gol pentru toate paginile. Intervalele sunt inclusive." } else { "Intervalele sunt inclusive și numerotate de la 1." }}
+                            {if is_rotate || is_crop || is_watermark || is_extract_text { "Lasă gol pentru toate paginile. Intervalele sunt inclusive." } else { "Intervalele sunt inclusive și numerotate de la 1." }}
                         </small>
                     </div>
                 }
@@ -421,6 +427,8 @@ fn app() -> Html {
                         {"Decupează paginile"}
                     } else if is_watermark {
                         {"Aplică watermark"}
+                    } else if is_extract_text {
+                        {"Extrage textul"}
                     } else {
                         {"Unește documentele"}
                     }
@@ -457,7 +465,9 @@ impl worker::WorkerFile {
     fn into_download(self) -> Result<DownloadFile, String> {
         let bytes = js_sys::Uint8Array::from(self.bytes.as_slice());
         let parts = js_sys::Array::of1(&bytes);
-        let blob = web_sys::Blob::new_with_u8_array_sequence(&parts)
+        let options = BlobPropertyBag::new();
+        options.set_type(&self.mime_type);
+        let blob = web_sys::Blob::new_with_u8_array_sequence_and_options(&parts, &options)
             .map_err(|error| format!("Nu am putut crea rezultatul: {error:?}"))?;
         let url = Url::create_object_url_with_blob(&blob)
             .map_err(|error| format!("Nu am putut crea linkul: {error:?}"))?;

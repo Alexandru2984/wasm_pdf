@@ -2,8 +2,10 @@
 
 mod protocol;
 
-use pdf_engine::{Error as EngineError, crop, merge, reorder, rotate, split, watermark};
-use protocol::{Operation, PROTOCOL_VERSION, WorkerRequest, WorkerResponse};
+use pdf_engine::{
+    Error as EngineError, crop, extract_text, merge, reorder, rotate, split, watermark,
+};
+use protocol::{Operation, PROTOCOL_VERSION, WorkerFile, WorkerRequest, WorkerResponse};
 use wasm_bindgen::prelude::*;
 
 /// Installs readable panic messages in the browser worker console.
@@ -59,32 +61,38 @@ fn process(request: WorkerRequest, started_at: f64) -> WorkerResponse {
                 .into_iter()
                 .map(serde_bytes::ByteBuf::into_vec)
                 .collect::<Vec<_>>();
-            merge(&documents).map(|bytes| vec![bytes])
+            merge(&documents).map(|bytes| WorkerFile::pdf_files(operation, vec![bytes]))
         }
         WorkerRequest::Split {
             document, ranges, ..
-        } => split(&document, &ranges),
+        } => split(&document, &ranges).map(|files| WorkerFile::pdf_files(operation, files)),
         WorkerRequest::Rotate {
             document,
             ranges,
             angle_degrees,
             ..
-        } => rotate(&document, &ranges, angle_degrees).map(|bytes| vec![bytes]),
+        } => rotate(&document, &ranges, angle_degrees)
+            .map(|bytes| WorkerFile::pdf_files(operation, vec![bytes])),
         WorkerRequest::Reorder {
             document, order, ..
-        } => reorder(&document, &order).map(|bytes| vec![bytes]),
+        } => reorder(&document, &order).map(|bytes| WorkerFile::pdf_files(operation, vec![bytes])),
         WorkerRequest::Crop {
             document,
             ranges,
             rectangle,
             ..
-        } => crop(&document, &ranges, rectangle).map(|bytes| vec![bytes]),
+        } => crop(&document, &ranges, rectangle)
+            .map(|bytes| WorkerFile::pdf_files(operation, vec![bytes])),
         WorkerRequest::Watermark {
             document,
             ranges,
             options,
             ..
-        } => watermark(&document, &ranges, &options).map(|bytes| vec![bytes]),
+        } => watermark(&document, &ranges, &options)
+            .map(|bytes| WorkerFile::pdf_files(operation, vec![bytes])),
+        WorkerRequest::ExtractText {
+            document, ranges, ..
+        } => extract_text(&document, &ranges).map(|text| vec![WorkerFile::extracted_text(text)]),
     };
 
     match result {

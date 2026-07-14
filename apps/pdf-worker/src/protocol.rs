@@ -44,6 +44,12 @@ pub enum WorkerRequest {
         ranges: Vec<PageRange>,
         options: WatermarkOptions,
     },
+    ExtractText {
+        protocol_version: u16,
+        request_id: String,
+        document: serde_bytes::ByteBuf,
+        ranges: Vec<PageRange>,
+    },
 }
 
 impl WorkerRequest {
@@ -66,6 +72,9 @@ impl WorkerRequest {
             }
             | Self::Watermark {
                 protocol_version, ..
+            }
+            | Self::ExtractText {
+                protocol_version, ..
             } => *protocol_version,
         }
     }
@@ -77,7 +86,8 @@ impl WorkerRequest {
             | Self::Rotate { request_id, .. }
             | Self::Reorder { request_id, .. }
             | Self::Crop { request_id, .. }
-            | Self::Watermark { request_id, .. } => request_id,
+            | Self::Watermark { request_id, .. }
+            | Self::ExtractText { request_id, .. } => request_id,
         }
     }
 
@@ -89,6 +99,7 @@ impl WorkerRequest {
             Self::Reorder { .. } => Operation::Reorder,
             Self::Crop { .. } => Operation::Crop,
             Self::Watermark { .. } => Operation::Watermark,
+            Self::ExtractText { .. } => Operation::ExtractText,
         }
     }
 }
@@ -102,6 +113,7 @@ pub enum Operation {
     Reorder,
     Crop,
     Watermark,
+    ExtractText,
     Unknown,
 }
 
@@ -129,21 +141,14 @@ impl WorkerResponse {
     pub fn success(
         request_id: String,
         operation: Operation,
-        files: Vec<Vec<u8>>,
+        files: Vec<WorkerFile>,
         duration_ms: u64,
     ) -> Self {
         Self::Success {
             protocol_version: PROTOCOL_VERSION,
             request_id,
             operation,
-            files: files
-                .into_iter()
-                .enumerate()
-                .map(|(index, bytes)| WorkerFile {
-                    name: format!("{operation:?}-{}.pdf", index + 1).to_lowercase(),
-                    bytes,
-                })
-                .collect(),
+            files,
             duration_ms,
         }
     }
@@ -169,6 +174,29 @@ impl WorkerResponse {
 #[derive(Debug, Serialize)]
 pub struct WorkerFile {
     pub name: String,
+    pub mime_type: String,
     #[serde(with = "serde_bytes")]
     pub bytes: Vec<u8>,
+}
+
+impl WorkerFile {
+    pub fn pdf_files(operation: Operation, files: Vec<Vec<u8>>) -> Vec<Self> {
+        files
+            .into_iter()
+            .enumerate()
+            .map(|(index, bytes)| Self {
+                name: format!("{operation:?}-{}.pdf", index + 1).to_lowercase(),
+                mime_type: "application/pdf".to_owned(),
+                bytes,
+            })
+            .collect()
+    }
+
+    pub fn extracted_text(text: String) -> Self {
+        Self {
+            name: "extract-text.txt".to_owned(),
+            mime_type: "text/plain;charset=utf-8".to_owned(),
+            bytes: text.into_bytes(),
+        }
+    }
 }

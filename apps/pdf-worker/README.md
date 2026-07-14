@@ -38,3 +38,7 @@ Watermark requests use `operation: "watermark"`, one `document`, optional
 `ranges`, and `options` containing `text`, `x`, `y`, `font_size`,
 `rotation_degrees`, and `opacity`. Text is appended to the page content stream;
 the current standard-font implementation accepts printable ASCII.
+
+Extract Text requests use `operation: "extract_text"`, one `document`, and
+optional `ranges`. The result is `extract-text.txt` with
+`text/plain;charset=utf-8`; extraction is bounded per decompressed page.

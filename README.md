@@ -3,8 +3,8 @@
 Editor PDF local-first construit ca workspace Rust. Documentele sunt procesate
 în browser, într-un Web Worker WebAssembly, iar backend-ul primește numai
 telemetrie operațională. Verticalele livrate implementează Merge, Split, Rotate,
-Reorder, Crop și Watermark, de la interfață până la motorul PDF și
-observabilitate.
+Reorder, Crop, Watermark și Extract Text, de la interfață până la motorul PDF
+și observabilitate.
 
 > Aceasta este fundația noii arhitecturi, nu încă paritatea funcțională 1:1 cu
 > aplicația originală. Starea exactă și următoarele milestone-uri sunt în
@@ -13,8 +13,8 @@ observabilitate.
 ## Ce este funcțional
 
 - UI Yew compilat în WASM, cu selectare, validare și descărcare locală;
-- Merge, Split, Rotate, Reorder, Crop și Watermark implementate în Rust cu
-  `lopdf`;
+- Merge, Split, Rotate, Reorder, Crop, Watermark și Extract Text implementate în
+  Rust cu `lopdf`;
 - procesare într-un Web Worker dedicat, fără blocarea thread-ului UI;
 - transfer de `ArrayBuffer` între UI și worker, fără upload de conținut PDF;
 - protocol worker versionat, cu request ID și erori stabile;
@@ -138,6 +138,8 @@ aria și impune încadrarea în `MediaBox` pentru fiecare pagină selectată.
 Watermark inserează textul în content stream, cu poziție, mărime, rotație și
 opacitate. Implementarea curentă folosește Helvetica/WinAnsi și acceptă text
 ASCII imprimabil; fonturile Unicode embedded rămân necesare pentru paritate.
+Extract Text poate selecta intervale, limitează decompresia la 32 MiB per pagină
+și livrează un fișier UTF-8 `text/plain`; PDF-urile scanate necesită OCR separat.
 Operațiile au o limită cumulată de 256 MiB și refuză PDF-urile criptate.
 
 ```javascript
@@ -154,7 +156,7 @@ worker.postMessage(
 ```
 
 Răspunsurile includ `status`, `request_id`, `operation`, `duration_ms` și fie
-`files`, fie `code` plus `message`. Contractul și exemplul Merge sunt descrise
+`files` cu MIME type, fie `code` plus `message`. Contractul și exemplul Merge sunt descrise
 în [documentația worker-ului](apps/pdf-worker/README.md).
 
 ## Observabilitate

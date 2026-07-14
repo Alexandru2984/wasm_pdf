@@ -16,6 +16,7 @@ pub enum Operation {
     Reorder,
     Crop,
     Watermark,
+    ExtractText,
     Unknown,
 }
 
@@ -28,6 +29,7 @@ impl Operation {
             Self::Reorder => "reorder",
             Self::Crop => "crop",
             Self::Watermark => "watermark",
+            Self::ExtractText => "extract_text",
             Self::Unknown => "unknown",
         }
     }
@@ -90,6 +92,11 @@ pub enum WorkerRequest {
         ranges: Vec<PageRange>,
         options: WatermarkOptions,
     },
+    ExtractText {
+        request_id: String,
+        document: Vec<u8>,
+        ranges: Vec<PageRange>,
+    },
 }
 
 pub struct OperationOptions {
@@ -118,6 +125,7 @@ pub enum WorkerResponse {
 #[derive(Debug, Deserialize)]
 pub struct WorkerFile {
     pub name: String,
+    pub mime_type: String,
     #[serde(with = "serde_bytes")]
     pub bytes: Vec<u8>,
 }
@@ -171,6 +179,11 @@ pub async fn read_request(
             options: options
                 .watermark
                 .ok_or("Configurația watermark lipsește.")?,
+        }),
+        Operation::ExtractText => Ok(WorkerRequest::ExtractText {
+            request_id,
+            document: documents.into_iter().next().ok_or("Fișierul lipsește.")?,
+            ranges: options.ranges,
         }),
         Operation::Unknown => Err("Operația nu este suportată.".to_owned()),
     }
@@ -295,6 +308,14 @@ impl WorkerRequest {
                 set(&value, "rotation_degrees", &options.rotation_degrees.into())?;
                 set(&value, "opacity", &options.opacity.into())?;
                 set(&message, "options", &value.into())?;
+            }
+            Self::ExtractText {
+                request_id,
+                document,
+                ranges,
+            } => {
+                set_document_request(&message, &transfer, &request_id, "extract_text", &document)?;
+                set(&message, "ranges", &ranges_to_js(ranges)?.into())?;
             }
         }
 

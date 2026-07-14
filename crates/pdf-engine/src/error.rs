@@ -48,6 +48,9 @@ pub enum Error {
     #[error("watermark is invalid: {reason}")]
     InvalidWatermark { reason: String },
 
+    #[error("text extraction failed: {reason}")]
+    TextExtractionFailed { reason: String },
+
     #[error("could not write the output PDF: {0}")]
     WriteFailed(String),
 }
@@ -69,6 +72,7 @@ impl Error {
             Self::InvalidPageOrder { .. } => "invalid_page_order",
             Self::InvalidRectangle { .. } => "invalid_rectangle",
             Self::InvalidWatermark { .. } => "invalid_watermark",
+            Self::TextExtractionFailed { .. } => "text_extraction_failed",
             Self::WriteFailed(_) => "write_failed",
         }
     }
