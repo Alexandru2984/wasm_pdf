@@ -29,7 +29,8 @@ motorul PDF și observabilitate.
 - imagini multi-stage, procese non-root și containere read-only unde este
   posibil;
 - CI pentru format, Clippy, teste native, ținte WASM, configurații și imagini;
-- CD către GitHub Container Registry, urmat opțional de un webhook de rollout.
+- CD către GitHub Container Registry și rollout VPS atomic prin SSH, cu host
+  key pinning, backup pre-deploy, health-check și rollback automat;
 - backup-uri PostgreSQL criptate în flux cu `age`, upload R2/S3 și verificare
   prin restaurare completă într-o bază temporară.
 

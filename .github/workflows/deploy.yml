@@ -5,43 +5,52 @@ on:
     workflows: [Test]
     branches: [main]
     types: [completed]
-  workflow_dispatch:
 
 permissions:
   contents: read
-  packages: write
-  id-token: write
 
 concurrency:
   group: production
   cancel-in-progress: false
 
 jobs:
-  publish:
-    name: Publish ${{ matrix.image }} image
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+  prepare:
+    name: Resolve tested revision
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        image: [backend, frontend]
+    timeout-minutes: 5
+    outputs:
+      repository: ${{ steps.revision.outputs.repository }}
+      sha: ${{ steps.revision.outputs.sha }}
     steps:
       - name: Resolve revision
         id: revision
         env:
           WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
-          DISPATCH_SHA: ${{ github.sha }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          revision="${WORKFLOW_RUN_SHA:-$DISPATCH_SHA}"
-          echo "sha=$revision" >> "$GITHUB_OUTPUT"
-          echo "repository=${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          revision="$WORKFLOW_RUN_SHA"
+          {
+            echo "sha=$revision"
+            echo "repository=${REPOSITORY,,}"
+          } >> "$GITHUB_OUTPUT"
 
+  publish:
+    name: Publish ${{ matrix.image }} image
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        image: [backend, frontend]
+    steps:
       - name: Check out tested revision
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
-          ref: ${{ steps.revision.outputs.sha }}
+          ref: ${{ needs.prepare.outputs.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
@@ -57,12 +66,12 @@ jobs:
         id: metadata
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
-          images: ghcr.io/${{ steps.revision.outputs.repository }}-${{ matrix.image }}
+          images: ghcr.io/${{ needs.prepare.outputs.repository }}-${{ matrix.image }}
           tags: |
             type=raw,value=latest
             type=sha,format=long,prefix=sha-
           labels: |
-            org.opencontainers.image.revision=${{ steps.revision.outputs.sha }}
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.sha }}
 
       - name: Build and publish image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
@@ -78,33 +87,96 @@ jobs:
           sbom: true
 
   rollout:
-    name: Trigger production rollout
-    needs: publish
+    name: Roll out to production VPS
+    needs: [prepare, publish]
     runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment: production
     env:
-      DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.VPS_PORT }}
+      VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      VPS_USER: ${{ secrets.VPS_USER }}
     steps:
-      - name: Notify deployment platform
-        env:
-          WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
-          DISPATCH_SHA: ${{ github.sha }}
-          REPOSITORY: ${{ github.repository }}
+      - name: Check out tested revision
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+
+      - name: Check deployment credentials
+        id: credentials
         run: |
-          if [ -z "$DEPLOY_WEBHOOK_URL" ]; then
-            echo "DEPLOY_WEBHOOK_URL is not configured; images were published only."
-            exit 0
+          if [[ -n "$VPS_HOST" && -n "$VPS_KNOWN_HOSTS" && -n "$VPS_SSH_PRIVATE_KEY" && -n "$VPS_USER" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "VPS SSH secrets are not configured; immutable images were published only."
           fi
 
-          revision="${WORKFLOW_RUN_SHA:-$DISPATCH_SHA}"
-          # REPOSITORY is injected through the step environment by GitHub Actions.
-          # shellcheck disable=SC2153
-          repository="${REPOSITORY,,}"
-          jq -n \
-            --arg revision "$revision" \
-            --arg backend "ghcr.io/${repository}-backend:sha-${revision}" \
-            --arg frontend "ghcr.io/${repository}-frontend:sha-${revision}" \
-            '{revision: $revision, images: {backend: $backend, frontend: $frontend}}' \
-            | curl --fail-with-body --silent --show-error \
-                --header "Content-Type: application/json" \
-                --data-binary @- \
-                "$DEPLOY_WEBHOOK_URL"
+      - name: Build deployment bundle
+        if: steps.credentials.outputs.configured == 'true'
+        id: bundle
+        env:
+          REVISION: ${{ needs.prepare.outputs.sha }}
+        run: |
+          archive="$RUNNER_TEMP/wasm-pdf-editor-${REVISION}.tar.gz"
+          tar --create --gzip --file "$archive" \
+            docker-compose.yml compose.production.yml infra scripts
+          {
+            echo "archive=$archive"
+            echo "checksum=$(sha256sum "$archive" | awk '{print $1}')"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Configure pinned SSH transport
+        if: steps.credentials.outputs.configured == 'true'
+        id: ssh
+        run: |
+          port="${VPS_PORT:-22}"
+          [[ $port =~ ^[0-9]+$ && $port -ge 1 && $port -le 65535 ]]
+          key_file="$RUNNER_TEMP/deploy-key"
+          known_hosts_file="$RUNNER_TEMP/known-hosts"
+          install -m 0600 /dev/null "$key_file" "$known_hosts_file"
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" >"$key_file"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" >"$known_hosts_file"
+          {
+            echo "key=$key_file"
+            echo "known_hosts=$known_hosts_file"
+            echo "port=$port"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload release bundle
+        if: steps.credentials.outputs.configured == 'true'
+        env:
+          ARCHIVE: ${{ steps.bundle.outputs.archive }}
+          REVISION: ${{ needs.prepare.outputs.sha }}
+        run: |
+          scp -P "${{ steps.ssh.outputs.port }}" \
+            -i "${{ steps.ssh.outputs.key }}" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="${{ steps.ssh.outputs.known_hosts }}" \
+            "$ARCHIVE" "$VPS_USER@$VPS_HOST:/tmp/wasm-pdf-editor-${REVISION}.tar.gz"
+
+      - name: Deploy and verify release
+        if: steps.credentials.outputs.configured == 'true'
+        env:
+          ARCHIVE_CHECKSUM: ${{ steps.bundle.outputs.checksum }}
+          REPOSITORY: ${{ needs.prepare.outputs.repository }}
+          REVISION: ${{ needs.prepare.outputs.sha }}
+        run: |
+          ssh -p "${{ steps.ssh.outputs.port }}" \
+            -i "${{ steps.ssh.outputs.key }}" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="${{ steps.ssh.outputs.known_hosts }}" \
+            "$VPS_USER@$VPS_HOST" \
+            bash -s -- \
+              "/tmp/wasm-pdf-editor-${REVISION}.tar.gz" \
+              "$ARCHIVE_CHECKSUM" \
+              "$REVISION" \
+              "ghcr.io/${REPOSITORY}-backend:sha-${REVISION}" \
+              "ghcr.io/${REPOSITORY}-frontend:sha-${REVISION}" \
+            <scripts/deploy-vps.sh

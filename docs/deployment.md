@@ -12,7 +12,7 @@ Caddy in front of the application for automatic HTTPS.
 - an A/AAAA DNS record pointing the application hostname at the VPS;
 - inbound TCP 80/443 and UDP 443; Grafana and PostgreSQL stay non-public;
 - immutable backend and frontend image references, preferably `sha-*` tags or
-  image digests published by the deployment workflow.
+  image digests published by the deployment workflow;
 - `age`, AWS CLI v2 and the encrypted off-site backup policy described in the
   [disaster recovery runbook](disaster-recovery.md).
 
@@ -36,6 +36,40 @@ The backend accepts `DATABASE_PASSWORD_FILE`, `JWT_SECRET_FILE`,
 `EMAIL_TOKEN_SECRET_FILE`, `SMTP_PASSWORD_FILE` and, when a complete external
 connection string is needed, `DATABASE_URL_FILE`. Setting a value and its
 `_FILE` variant simultaneously is rejected.
+
+## Prepare the release account
+
+Use `/opt/wasm-pdf-editor` as the release root and allow the unprivileged
+`deploy` account to own it. The account needs Docker access and one narrowly
+scoped passwordless command for the mandatory pre-deployment backup:
+
+```bash
+sudo install -d -o deploy -g deploy -m 0750 \
+  /opt/wasm-pdf-editor /opt/wasm-pdf-editor/releases /opt/wasm-pdf-editor/incoming
+sudo usermod -aG docker deploy
+echo 'deploy ALL=(root) NOPASSWD: /usr/bin/systemctl start wasm-pdf-backup.service' \
+  | sudo tee /etc/sudoers.d/wasm-pdf-editor-backup >/dev/null
+sudo chmod 0440 /etc/sudoers.d/wasm-pdf-editor-backup
+sudo visudo --check --file=/etc/sudoers.d/wasm-pdf-editor-backup
+```
+
+Membership in the Docker group is root-equivalent. Use this account only for
+deployment, disable password authentication and restrict its SSH key by source
+address when GitHub-hosted runner networking permits it.
+
+Install `infra/examples/deployment.env.example` as
+`/etc/wasm-pdf-editor/deployment.env`, replace every placeholder and make it
+readable only by `deploy`. It contains deployment settings, while credentials
+remain separate Docker secret files.
+
+If the GHCR packages are private, authenticate once as `deploy` with a
+fine-grained, read-only package token. Never put this token in
+`deployment.env`:
+
+```bash
+printf '%s' "$GHCR_READ_ONLY_TOKEN" \
+  | docker login ghcr.io --username YOUR_GITHUB_USER --password-stdin
+```
 
 ## Render and start
 
@@ -74,6 +108,33 @@ the production override and must never be exposed as a production relay.
 The `migrate` service runs embedded SQLx migrations to completion before the
 backend starts. Backend replicas use `RUN_MIGRATIONS=false`, so schema changes
 do not race during rollout.
+
+## Automated rollout from GitHub
+
+The deployment workflow publishes SBOM/provenance-enabled images tagged with
+the full tested commit SHA. Configure these repository secrets:
+
+- `VPS_HOST`, `VPS_PORT` (optional, defaults to 22) and `VPS_USER`;
+- `VPS_SSH_PRIVATE_KEY`, a dedicated deployment key;
+- `VPS_KNOWN_HOSTS`, captured and verified out-of-band from the VPS host key.
+
+Attach required reviewers to the GitHub `production` environment if releases
+need an explicit approval gate. Store the VPS secrets in that environment so
+they are exposed only to the rollout job.
+
+Only after the `Test` workflow passes on `main`, CI builds a
+checksum-protected release archive,
+uses strict SSH host-key checking and runs `scripts/deploy-vps.sh` remotely. The
+script serializes deployments with `flock`, validates archive paths and SHA-256,
+accepts only image tags matching the tested revision, pulls before switching,
+runs the systemd backup on upgrades, changes the `current` symlink atomically,
+waits for Compose health and verifies readiness over the public TLS hostname.
+If readiness fails, it restores the preceding release and image references.
+Database migrations must therefore remain backward compatible with one prior
+application release.
+
+If the SSH secrets are absent, the workflow intentionally publishes images but
+does not mutate any server.
 
 ## Grafana access
 
