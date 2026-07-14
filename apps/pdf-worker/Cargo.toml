@@ -14,10 +14,10 @@ console_error_panic_hook.workspace = true
 js-sys.workspace = true
 pdf-engine.workspace = true
 serde.workspace = true
+serde_bytes = "0.11.19"
 serde-wasm-bindgen = "0.6.5"
 wasm-bindgen.workspace = true
 web-sys = { workspace = true, features = ["DedicatedWorkerGlobalScope", "MessageEvent"] }
 
 [lints]
 workspace = true
-

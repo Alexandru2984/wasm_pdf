@@ -8,8 +8,11 @@ description = "Target-agnostic PDF operations shared by the browser worker and n
 
 [dependencies]
 lopdf.workspace = true
+serde.workspace = true
 thiserror.workspace = true
 
 [lints]
 workspace = true
 
+[dev-dependencies]
+pretty_assertions = "1.4.1"
